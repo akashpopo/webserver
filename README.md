@@ -45,7 +45,7 @@ Here is an example of a test file that makes hydra connect to the webserver on p
 ```
 The first request connects immediately, but waits for 1 second before sending the request. The remaining requests all wait 0.5 seconds before connecting. By setting the delay and the pause appropriate we can control how many clients are connected to the webserver at any time.
 
-If the `-t` swictch is used, e.g.,
+If the `-t` switch is used, e.g.,
 ```
 ./hydra.py -t < test.in
 ```

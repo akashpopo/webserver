@@ -2,9 +2,54 @@
 As part of our Operating Systems course at Dalhousie University, we are developing a Caching Multithreaded Scheduling Web Server in C.
 
 ## Table of Contents
+- Environment Setup
+- Compiling and Running the Server
+- Testing the Server
 - Contribution Workflow
 - Background
 - Project Goals
+
+## Environment Setup
+
+1. cd into your dev directory, e.g. `cd dev/os/project`
+2. clone this git repository: `git clone https://github.com/Mons1Oerjan/webserver.git`
+
+## Compiling and Running the Server
+Here is a description on how to compile and run the program:
+
+1. cd into your project directory, e.g. `cd dev/os/project/webserver`
+2. Compile all files using the makefile and the make command: `make`
+3. Run the server: `./sws portnumber`
+
+## Testing the Server
+We have been provided with a script `hydra.py` to test our web server once it's running. Hydra reads in a test script from stdin, i.e. to run hydra use the command:
+
+```
+./hydra.py < test.in
+```
+
+where `test.in` is a file containing a test script.  The format of the test file is as follows:
+- The first line of the file is a single integer, denoting the port number of the webserver
+- The remain lines represent requests to the server.  Each request comprises three parts:
+  delay : number of seconds (float) before connecting to the server
+  pause : number of seconds (flaot) after connectkng before sending request
+  file  : file (path) to requet
+
+Here is an example of a test file that makes hydra connect to the webserver on port 8080 and requests four files:
+```
+8080
+0.0 1.0 sws.c
+0.5 0.0 network.c
+0.5 0.0 network.h
+0.5 0.0 makefile
+```
+The first request connects immediately, but waits for 1 second before sending the request. The remaining requests all wait 0.5 seconds before connecting. By setting the delay and the pause appropriate we can control how many clients are connected to the webserver at any time.
+
+If the `-t` swictch is used, e.g.,
+```
+./hydra.py -t < test.in
+```
+the times of the response are printed instead of the output.
 
 ## Contribution Workflow
 To contribute to this project, please follow these guidelines:

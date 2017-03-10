@@ -97,7 +97,7 @@ static void serve_client( int fd ) {
  *             argv : array of pointers to command line parameters
  * Returns: an integer status code, 0 for success, something else for error.
  */
-int main( int argc, char **argv ) {
+int main(int argc, char **argv) {
   int port = -1;                                    /* server port # */
   int fd;                                           /* client file descriptor */
   int numThreads;
@@ -105,25 +105,19 @@ int main( int argc, char **argv ) {
 
   /* check for and process input parameters: */
   if((argc <= 4) || (sscanf(argv[1], "%d", &port) < 1)
-                || (sscanf(argv[3], "%d", &numThreads) < 1)
-                || (sscanf(argv[4], "%d", &cacheSize) < 1)) {
+                 || (sscanf(argv[3], "%d", &numThreads) < 1)
+                 || (sscanf(argv[4], "%d", &cacheSize) < 1)) {
     printf("usage: sws <port> <schedulerAlgorithm> <numThreads> <cacheSize>\n");
     return 0;
   }
 
-  /* display settings: */
-  printf("Using Port: %d", port);
-  printf("Using Scheduler Algorithm: %s", argv[2]);
-  printf("Number of Threads to use: %d", numThreads);
-  printf("Setting size of cache to: %d", cacheSize);
-
   /* initialize all components: */
-  network_init( port );                             /* init network module */
+  network_init(port);                             /* init network module */
 
   for( ;; ) {                                       /* main loop */
     network_wait();                                 /* wait for clients */
 
-    for( fd = network_open(); fd >= 0; fd = network_open() ) { /* get clients */
+    for(fd = network_open(); fd >= 0; fd = network_open()) { /* get clients */
       serve_client( fd );                           /* process each client */
     }
   }

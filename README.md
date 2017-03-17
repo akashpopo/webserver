@@ -19,7 +19,15 @@ Here is a description on how to compile and run the program:
 
 1. cd into your project directory, e.g. `cd dev/os/project/webserver`
 2. Compile all files using the makefile and the make command: `make`
-3. Run the server: `./sws portnumber`, e.g. `./sws 6789` or `./sws 12345`
+3. Run the server using this format: `./sws <portnumber> <scheduling_algorithm> <number_of_threads> <cache_size>`, e.g: 
+```
+./sws 6789 SJF 100 104567
+``` 
+or:
+```
+./sws 12345 RR 67 456354
+```
+Note: The current state of the server requires us to fill in the scheduler algorithm, number of threads, and the cache size event though the features have not been implemented yet. Don't worry about which ones to select when testing the program, as long as you select some algorithm, some numbers of threads and a cachesize you should be fine.
 
 ## Testing the Server
 We have been provided with a script `hydra.py` to test our web server once it's running. Hydra reads in a test script from stdin, i.e. to run hydra use the command:

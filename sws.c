@@ -15,8 +15,8 @@
 #include "network.h"
 
 /* constants */
-#define MAX_HTTP_SIZE 8192                 /* size of buffer to allocate */
-#define MAX_REQUESTS 100                   /* max # of requests          */
+#define MAX_HTTP_SIZE 8192       /* size of buffer to allocate */
+#define MAX_REQUESTS 100         /* max # of requests          */
 #define TRUE 1
 #define FALSE 0
 
@@ -28,7 +28,7 @@ struct rcb {
     int bytes_remaining;         /* # of bytes that remain to be sent                      */
     int quantum;                 /* Max # of bytes to be sent when the request is serviced */
     FILE* file;                  /* File handle of the requested file                      */
-    struct rcb* next_block;             /* Pointer to the next block in line                      */
+    struct rcb* next_block;      /* Pointer to the next block in line                      */
 };
 
 
@@ -56,7 +56,7 @@ struct rcb *rcb_alloc(void) {
 
     //TODO: Mutex lock for multithreading
     block = free_rcb;                       // allocate
-    free_rcb = free_rcb->next_block;
+    free_rcb = free_rcb->next_block;        // get next block
 
     //set block's memory location to 0's to make space for the new block:
     memset(block, 0, sizeof(struct rcb));

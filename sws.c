@@ -82,65 +82,64 @@ void rcb_free(struct rcb *block) {
  *             fd : the file descriptor to the client connection
  * Returns: None
  */
-static void serve_client( int fd ) {
-  static char *buffer;                              /* request buffer */
-  char *req = NULL;                                 /* ptr to req file */
-  char *brk;                                        /* state used by strtok */
-  char *tmp;                                        /* error checking ptr */
-  FILE *fin;                                        /* input file handle */
-  int len;                                          /* length of data read */
+static void serve_client(int fd) {
+    static char *buffer;                                      /* request buffer */
+    char *req = NULL;                                         /* ptr to req file */
+    char *brk;                                                /* state used by strtok */
+    char *tmp;                                                /* error checking ptr */
+    FILE *fin;                                                /* input file handle */
+    int len;                                                  /* length of data read */
 
-  if( !buffer ) {                                   /* 1st time, alloc buffer */
-    buffer = malloc( MAX_HTTP_SIZE );
-    if( !buffer ) {                                 /* error check */
-      perror( "Error while allocating memory" );
-      abort();
-    }
-  }
-
-  memset( buffer, 0, MAX_HTTP_SIZE );
-  if( read( fd, buffer, MAX_HTTP_SIZE ) <= 0 ) {    /* read req from client */
-    perror( "Error while reading request" );
-    abort();
-  }
-
-  /* standard requests are of the form
-   *   GET /foo/bar/qux.html HTTP/1.1
-   * We want the second token (the file path).
-   */
-  tmp = strtok_r( buffer, " ", &brk );              /* parse request */
-  if( tmp && !strcmp( "GET", tmp ) ) {
-    req = strtok_r( NULL, " ", &brk );
-  }
-
-  if( !req ) {                                      /* is req valid? */
-    len = sprintf( buffer, "HTTP/1.1 400 Bad request\n\n" );
-    write( fd, buffer, len );                       /* if not, send err */
-  } else {                                          /* if so, open file */
-    req++;                                          /* skip leading / */
-    fin = fopen( req, "r" );                        /* open file */
-    if( !fin ) {                                    /* check if successful */
-      len = sprintf( buffer, "HTTP/1.1 404 File not found\n\n" );
-      write( fd, buffer, len );                     /* if not, send err */
-    } else {                                        /* if so, send file */
-      len = sprintf( buffer, "HTTP/1.1 200 OK\n\n" );/* send success code */
-      write( fd, buffer, len );
-
-      do {                                          /* loop, read & send file */
-        len = fread( buffer, 1, MAX_HTTP_SIZE, fin );  /* read file chunk */
-        if( len < 0 ) {                             /* check for errors */
-            perror( "Error while writing to client" );
-        } else if( len > 0 ) {                      /* if none, send chunk */
-          len = write( fd, buffer, len );
-          if( len < 1 ) {                           /* check for errors */
-            perror( "Error while writing to client" );
-          }
+    if (!buffer) {                                            /* 1st time, alloc buffer */
+        buffer = malloc(MAX_HTTP_SIZE);
+        if(!buffer) {                                         /* error check */
+            perror("Error while allocating memory");
+            abort();
         }
-      } while( len == MAX_HTTP_SIZE );              /* the last chunk < 8192 */
-      fclose( fin );
     }
-  }
-  close( fd );                                     /* close client connection*/
+
+    memset(buffer, 0, MAX_HTTP_SIZE);
+    if (read(fd, buffer, MAX_HTTP_SIZE) <= 0) {               /* read req from client */
+        perror("Error while reading request");
+        abort();
+    }
+
+    /* standard requests are of the form
+     *   GET /foo/bar/qux.html HTTP/1.1
+     * We want the second token (the file path).
+     */
+    tmp = strtok_r(buffer, " ", &brk);                        /* parse request */
+    if (tmp && !strcmp("GET", tmp)) {
+        req = strtok_r(NULL, " ", &brk);
+    }
+
+    if (!req) {                                               /* is req valid? */
+        len = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
+        write(fd, buffer, len);                               /* if not, send err */
+    } else {                                                  /* if so, open file */
+        req++;                                                /* skip leading / */
+        fin = fopen(req, "r");                                /* open file */
+        if (!fin) {                                           /* check if successful */
+            len = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
+            write(fd, buffer, len);                           /* if not, send err */
+        } else {                                              /* if so, send file */
+            len = sprintf(buffer, "HTTP/1.1 200 OK\n\n");     /* send success code */
+            write(fd, buffer, len);
+            do {                                              /* loop, read & send file */
+                len = fread(buffer, 1, MAX_HTTP_SIZE, fin);   /* read file chunk */
+                if (len < 0) {                                /* check for errors */
+                    perror("Error while writing to client");
+                } else if (len > 0) {                         /* if none, send chunk */
+                    len = write(fd, buffer, len);
+                    if (len < 1) {                            /* check for errors */
+                        perror( "Error while writing to client" );
+                    }
+                }
+            } while(len == MAX_HTTP_SIZE);                    /* the last chunk < 8192 */
+            fclose(fin);
+        }
+    }
+    close(fd);                                                /* close client connection*/
 }
 
 

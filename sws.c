@@ -11,8 +11,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include "network.h"
+#include "queue.h"
 
 /* constants */
 #define MAX_HTTP_SIZE 8192       /* size of buffer to allocate */
@@ -35,6 +37,8 @@ struct rcb {
 /* global variables */
 static struct rcb request_table[MAX_REQUESTS];
 static struct rcb *free_rcb;
+Queue *request_queue;
+static int SEQUENCE_COUNTER = 1;
 
 /**
  * Function that initializes the request control block
@@ -71,6 +75,15 @@ void rcb_free(struct rcb *block) {
     //TODO: Mutex lock for multithreading
     block->next_block = free_rcb;
     free_rcb = block;
+}
+
+/**
+* Function inits request queue
+**/
+void queue_init() {
+
+    request_queue = create_queue(MAX_REQUESTS);
+
 }
 
 
@@ -123,19 +136,41 @@ static void serve_client(int fd) {
             len = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
             write(fd, buffer, len);                           /* if not, send err */
         } else {                                              /* if so, send file */
+
+
+            struct stat fst;
+            fstat(fd, &fst);
+
+            struct rcb *block = rcb_alloc();
+            block->sequence_number = SEQUENCE_COUNTER;
+            block->client_file_descriptor = fd;
+            block->bytes_remaining = fst.st_size;
+            block->file = fin;
+            request_table[SEQUENCE_COUNTER - 1] = *block;
+
+            NODE *request_node = (NODE*) malloc(sizeof (NODE));
+            request_node->data.info = SEQUENCE_COUNTER - 1;
+
+            enqueue( request_queue, request_node );
+
+            SEQUENCE_COUNTER++;
+
+            //do {                                              /* loop, read & send file */
+            //    len = fread(buffer, 1, MAX_HTTP_SIZE, fin);   /* read file chunk */
+            //    if (len < 0) {                                /* check for errors */
+            //        perror("Error while writing to client");
+            //    } else if (len > 0) {                         /* if none, send chunk */
+            //        len = write(fd, buffer, len);
+            //        if (len < 1) {                            /* check for errors */
+            //            perror( "Error while writing to client" );
+            //        }
+            //    }
+            //} while(len == MAX_HTTP_SIZE);                    /* the last chunk < 8192 */
+
             len = sprintf(buffer, "HTTP/1.1 200 OK\n\n");     /* send success code */
             write(fd, buffer, len);
-            do {                                              /* loop, read & send file */
-                len = fread(buffer, 1, MAX_HTTP_SIZE, fin);   /* read file chunk */
-                if (len < 0) {                                /* check for errors */
-                    perror("Error while writing to client");
-                } else if (len > 0) {                         /* if none, send chunk */
-                    len = write(fd, buffer, len);
-                    if (len < 1) {                            /* check for errors */
-                        perror( "Error while writing to client" );
-                    }
-                }
-            } while(len == MAX_HTTP_SIZE);                    /* the last chunk < 8192 */
+
+
             fclose(fin);
         }
     }
@@ -158,7 +193,7 @@ int main(int argc, char **argv) {
     int fd;                                           /* client file descriptor */
     int numThreads;
     int cacheSize;
-    struct rcb *request;
+    //struct rcb *request;
 
     /* check for and process input parameters: */
     if((argc <= 4) || (sscanf(argv[1], "%d", &port) < 1)
@@ -171,6 +206,7 @@ int main(int argc, char **argv) {
     /* initialize all components: */
     network_init(port);                /* init network module */
     rcb_init();                        /* init rcb */
+    queue_init();
 
 
 
@@ -178,8 +214,10 @@ int main(int argc, char **argv) {
         network_wait();                                          /* wait for clients */
 
         for(fd = network_open(); fd >= 0; fd = network_open()) { /* get clients */
-            request = rcb_alloc();
-            request->client_file_descriptor = fd;
+
+            //request = rcb_alloc();
+            //request->client_file_descriptor = fd;
+
             serve_client(fd);                                  /* process each client */
         }
     }

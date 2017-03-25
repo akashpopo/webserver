@@ -137,23 +137,25 @@ static void serve_client(int fd) {
             write(fd, buffer, len);                           /* if not, send err */
         } else {                                              /* if so, send file */
 
+            //get file size
+            struct stat st;
+            stat(req, &st);
 
-            struct stat fst;
-            fstat(fd, &fst);
-
+            //allocate rcb and assign values
             struct rcb *block = rcb_alloc();
             block->sequence_number = SEQUENCE_COUNTER;
             block->client_file_descriptor = fd;
-            block->bytes_remaining = fst.st_size;
+            block->bytes_remaining = (int)st.st_size;
             block->file = fin;
-            request_table[SEQUENCE_COUNTER - 1] = *block;
 
+            //assign rcb to table and increment counter
+            request_table[SEQUENCE_COUNTER - 1] = *block;
+            SEQUENCE_COUNTER++;
+
+            //pass request_table index of current rcb to queue
             NODE *request_node = (NODE*) malloc(sizeof (NODE));
             request_node->data.info = SEQUENCE_COUNTER - 1;
-
             enqueue( request_queue, request_node );
-
-            SEQUENCE_COUNTER++;
 
             //do {                                              /* loop, read & send file */
             //    len = fread(buffer, 1, MAX_HTTP_SIZE, fin);   /* read file chunk */

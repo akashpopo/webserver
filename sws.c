@@ -20,6 +20,14 @@
 #define TRUE 1
 #define FALSE 0
 
+/*
+ * scheduler identifier
+ * 1 [Default] = SJF scheduler
+ * 2 = RR scheduler
+ * 3 = MLFB scheduler
+ */
+int schedulerType = 1;
+
 
 /* request control block */
 struct rcb {
@@ -167,6 +175,27 @@ int main(int argc, char **argv) {
         printf("usage: sws <port> <schedulerAlgorithm> <numThreads> <cacheSize>\n");
         return 0;
     }
+    
+    
+    
+    /* determine what scheduler has been chosen
+     * or notify if argument is invalid
+     */
+    if(strcmp(args[2], "SJF") == 0) {                        /* SJF scheduler chosen set to 1 */    
+        schedulerType = 1;
+    }
+    else if(strcmp(args[2], "RR") == 0) {                    /* RR scheduler chosen set to 2 */    
+        schedulerType = 2;
+    }
+    else if(strcmp(args[2], "MLFB") == 0) {                  /* MLFB scheduler chosen set to 3 */    
+        schedulerType = 3;
+    }
+    else {
+        printf("INVALID scheduler choosen");                 /* Invalid scheduler*/
+        /* NOTE: should the program abort if improper scheduler chosen or use SFJ as deafult? */
+    }
+    
+    
 
     /* initialize all components: */
     network_init(port);                /* init network module */

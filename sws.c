@@ -9,14 +9,14 @@
 
 /* constants */
 #define MAX_HTTP_SIZE 8192   /* size of buffer to allocate */
-#define MAX_REQS 100         /* max # of requests */
+#define MAX_REQUESTS 100         /* max # of requests */
 #define TRUE 1
 #define FALSE 0
 
 /* global variables */
-static struct rcb requests[MAX_REQS];      /* request table */
+static struct rcb request_table[MAX_REQUESTS];      /* request table */
 static struct rcb* free_rcb;
-static int request_counter = 1;                   /* request counter */
+static int request_counter = 1;
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -174,9 +174,9 @@ int main( int argc, char **argv ) {
     scheduler_init(argv[2]);   //argv[2] is the char* scheduler algorithm
     network_init(port);
 
-    free_rcb = requests;
-    for (int i = 0; i < MAX_REQS-1; i++) {
-        requests[i].next_rcb = &requests[i+1];
+    free_rcb = request_table;
+    for (int i = 0; i < MAX_REQUESTS-1; i++) {
+        request_table[i].next_rcb = &request_table[i+1];
     }
 
     /* infinite loop */

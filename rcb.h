@@ -1,8 +1,9 @@
 #ifndef REQUEST_CONTROL_BLOCK
-#define REQUEST_CONTROL_BLOCK
+#define REQUEST_CONTROL_BLOCK   /* singleton pattern */
 
 #include <stdio.h>
 
+/* initialize the request control block */
 struct rcb {
     int sequence_number;         /* sequence # of request */
     int client_file_descriptor;  /* client file descriptor */

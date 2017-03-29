@@ -12,7 +12,7 @@ extern struct rcb* scheduler_get_next();
 
 /* scheduler struct */
 struct scheduler_info {
-    char* name;                 /* name of scheduler */
-    submit_func submit;         /* func ptr to submit func */
-    get_next_func get_next;     /* func ptr tp get_next func */
+    char* algorithm;                 /* name of the algorithm (e.g. SJF) */
+    submit_func submit;         /* pointer to submit function */
+    get_next_func get_next;     /* pointer to get_next function */
 };

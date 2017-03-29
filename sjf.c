@@ -1,32 +1,24 @@
-/*
- * File: sjf.c
- * Author: Alex Brodsky
- * Purpose:   This is an implementation of the Shortest Job First Scheduler.
- */
-
 #include <stdio.h>
 
 #include "rcb.h"
 #include "scheduler.h"
 
+/* function prototypes */
 static void submit(struct rcb* r);
 static struct rcb* get_next(void);
 
+/* initialize the SJF scheduler struct */
 struct scheduler_info sjf_scheduler = {
     "SJF",
     &submit,
     &get_next
 };
 
-static struct rcb *head; /* head of ready queue */
+/* keep track of the RCB's head */
+static struct rcb *head;
 
-/* This function checks if there are any web clients waiting to connect.
- *    If one or more clients are waiting to connect, this function returns.
- *    Otherwise, this function puts the program to sleep (blocks) until
- *    a client connects.
- * Parameters: None
- * Returns: None
- */
+
+/* inserts an RCB to the queue */
 static void submit(struct rcb* r) {
     struct rcb *tmp;
 
@@ -37,23 +29,13 @@ static void submit(struct rcb* r) {
     } else {                                   /* after head */
         /* walk the list until the next rcb contains a lower priority request */
         for(tmp = head; tmp->next_rcb && (tmp->next_rcb->bytes_remaining <= r->bytes_remaining); tmp = tmp->next_rcb);
-
         /* insert RCB at this point */
         r->next_rcb = tmp->next_rcb;
         tmp->next_rcb = r;
     }
 }
 
-
-/* This function checks if there are any web clients waiting to connect.
- *    If one or more clients are waiting to connect, this function opens
- *    a connection to the next client waiting to connect, and returns an
- *    integer file descriptor for the connection.  If no clients are
- *    waiting, this function returns -1.
- * Parameters: None
- * Returns: A positive integer file decriptor to the next clients connection,
- *          or -1 if no client is waiting.
- */
+/* removes the current RCB and gets the next RCB */
 static struct rcb* get_next(void) {
     struct rcb* r = head;        /* remove first item from the queue */
     if(r) {                      /* if queue is not empty */

@@ -5,7 +5,7 @@
 #include "rcb.h"
 #include "scheduler.h"
 
-/* setup supported schedulers */
+/* declare supported schedulers */
 extern struct scheduler_info sjf_scheduler;
 extern struct scheduler_info rr_scheduler;
 extern struct scheduler_info mlfb_scheduler;
@@ -23,7 +23,7 @@ static struct scheduler_info* selected_scheduler;
 /* init and set the scheduler */
 extern void scheduler_init(char* selected_algorithm) {
     for (int i = 0; i < NUM_SUPPORTED_ALGORITHMS; i++) {
-        if (!strcmp(selected_algorithm, supported_schedulers[i]->name)) {
+        if (!strcmp(selected_algorithm, supported_schedulers[i]->algorithm)) {
             selected_scheduler = supported_schedulers[i];
             return;
         }
@@ -38,7 +38,7 @@ extern void scheduler_submit(struct rcb* request_control_block) {
     selected_scheduler->submit(request_control_block);
 }
 
-/* Remove RCB and get the next RCB */
+/* Removes the RCB and gets the next RCB */
 extern struct rcb* scheduler_get_next() {
     return selected_scheduler->get_next();
 }

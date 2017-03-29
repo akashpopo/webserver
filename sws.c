@@ -9,7 +9,7 @@
 
 /* constants */
 #define MAX_HTTP_SIZE 8192   /* size of buffer to allocate */
-#define MAX_REQUESTS 100         /* max # of requests */
+#define MAX_REQUESTS 100     /* max # of requests */
 #define TRUE 1
 #define FALSE 0
 
@@ -20,12 +20,9 @@ static int request_counter = 1;
 
 
 /* This function takes a file handle to a client, reads in the request,
- *    parses the request, and sends back the requested file.  If the
- *    request is improper or the file is not available, the appropriate
- *    error is sent back.
- * Parameters:
- *             fd : the file descriptor to the client connection
- * Returns: None
+ * parses the request, and sends back the requested file.  If the
+ * request is improper or the file is not available, the appropriate
+ * error is sent back.
  */
 static struct rcb* serve_client(int fd) {
     static char *buffer;                              /* request buffer */
@@ -36,9 +33,9 @@ static struct rcb* serve_client(int fd) {
     FILE *fin;                                        /* input file handle */
     int len = 0;                                      /* length of data read */
     int left = MAX_HTTP_SIZE;                         /* amount of buffer left */
-    struct rcb* r;                                           /* new rcb */
+    struct rcb* r;                                    /* new rcb */
 
-    if(!buffer) {                                   /* 1st time, alloc buffer */
+    if(!buffer) {                                     /* 1st time, alloc buffer */
         buffer = malloc(MAX_HTTP_SIZE);
         if(!buffer) {                                 /* error check */
             perror( "Error while allocating memory" );
@@ -49,9 +46,9 @@ static struct rcb* serve_client(int fd) {
     memset(buffer, 0, MAX_HTTP_SIZE);
     for(tmp = buffer; !strchr(tmp, '\n'); left -= len) { /* read req line */
         tmp += len;
-        len = read(fd, tmp, left);                    /* read req from client */
-        if(len <= 0) {                                /* if read incomplete */
-            perror("Error while reading request");      /* no need to go on */
+        len = read(fd, tmp, left);                       /* read req from client */
+        if(len <= 0) {                                   /* if read incomplete */
+            perror("Error while reading request");       /* no need to go on */
             close(fd);
             return NULL;
         }
@@ -61,21 +58,21 @@ static struct rcb* serve_client(int fd) {
     *   GET /foo/bar/qux.html HTTP/1.1
     * We want the second token (the file path).
     */
-    tmp = strtok_r(buffer, " ", &brk);              /* parse request */
+    tmp = strtok_r(buffer, " ", &brk);                   /* parse request */
     if(tmp && !strcmp("GET", tmp)) {
         req = strtok_r(NULL, " ", &brk);
     }
 
-    if(!req) {                                      /* is req valid? */
+    if(!req) {                                           /* is req valid? */
         len = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
-        write(fd, buffer, len);                       /* if not, send err */
-    } else {                                          /* if so, open file */
-        req++;                                          /* skip leading / */
-        fin = fopen(req, "r");                        /* open file */
-        if(!fin) {                                    /* check if successful */
+        write(fd, buffer, len);                          /* if not, send err */
+    } else {                                             /* if so, open file */
+        req++;                                           /* skip leading / */
+        fin = fopen(req, "r");                           /* open file */
+        if(!fin) {                                       /* check if successful */
             len = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
-            write(fd, buffer, len);                     /* if not, send err */
-        } else if(!fstat( fileno( fin ), &st)) {     /* if so, start request */
+            write(fd, buffer, len);                      /* if not, send err */
+        } else if(!fstat( fileno( fin ), &st)) {         /* if so, start request */
             len = sprintf(buffer, "HTTP/1.1 200 OK\n\n");/* send success code */
             write(fd, buffer, len);
 
@@ -83,7 +80,7 @@ static struct rcb* serve_client(int fd) {
             free_rcb = free_rcb->next_rcb;
             memset(r, 0, sizeof(struct rcb));
 
-            r->sequence_number = request_counter++;                          /* init RCB */
+            r->sequence_number = request_counter++;       /* init RCB */
             r->client_file_descriptor = fd;
             r->file = fin;
             r->bytes_remaining = st.st_size;
@@ -91,8 +88,8 @@ static struct rcb* serve_client(int fd) {
         }
         fclose(fin);
     }
-    close(fd);                                     /* close client connectuin*/
-    return NULL;                                     /* not a valid request */
+    close(fd);       /* close client connection */
+    return NULL;     /* not a valid request */
 }
 
 

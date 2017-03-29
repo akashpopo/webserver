@@ -1,49 +1,33 @@
-/*
- * File: rr.c
- * Author: Alex Brodsky
- * Purpose:  This fike implements the round robin scheduler
- */
-
 #include <stdio.h>
 
 #include "rcb.h"
 #include "scheduler.h"
 #include "queue.h"
 
-#define QUANTUM 8192     /* Maximum send at one time */
+/* constants */
+#define QUANTUM 8192
 
+/* function prototypes */
 static void submit(struct rcb* r);
 static struct rcb* get_next(void);
+
+/* initialize the queue */
 static struct queue ready;
 
+/* initialize the RR scheduler struct */
 struct scheduler_info rr_scheduler = {
     "RR",
     &submit,
     &get_next
 };
 
-/* This function checks if there are any web clients waiting to connect.
- *    If one or more clients are waiting to connect, this function returns.
- *    Otherwise, this function puts the program to sleep (blocks) until
- *    a client connects.
- * Parameters: None
- * Returns: None
- */
+/* inserts an RCB to the queue */
 static void submit(struct rcb* r) {
   r->bytes_max_allowed = QUANTUM;                /* set quantum */
   queue_enqueue(&ready, r);        /* enqueue */
 }
 
-
-/* This function checks if there are any web clients waiting to connect.
- *    If one or more clients are waiting to connect, this function opens
- *    a connection to the next client waiting to connect, and returns an
- *    integer file descriptor for the connection.  If no clients are
- *    waiting, this function returns -1.
- * Parameters: None
- * Returns: A positive integer file decriptor to the next clients connection,
- *          or -1 if no client is waiting.
- */
+/* removes the current RCB and gets the next RCB */
 static struct rcb* get_next(void) {
   return queue_dequeue(&ready);   /* dequeue and return */
 }

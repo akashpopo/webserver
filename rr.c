@@ -5,7 +5,6 @@
  */
 
 #include <stdio.h>
-#include <assert.h>
 
 #include "rcb.h"
 #include "scheduler.h"
@@ -13,12 +12,15 @@
 
 #define QUANTUM 8192     /* Maximum send at one time */
 
-static void submit( rcb * r );
-static rcb * get_next( void );
-static queue ready;
+static void submit(struct rcb* r);
+static struct rcb* get_next(void);
+static struct queue ready;
 
-vss rr_scheduler = { "RR", &submit, &get_next };
-
+struct scheduler_info rr_scheduler = {
+    "RR",
+    &submit,
+    &get_next
+};
 
 /* This function checks if there are any web clients waiting to connect.
  *    If one or more clients are waiting to connect, this function returns.
@@ -27,11 +29,9 @@ vss rr_scheduler = { "RR", &submit, &get_next };
  * Parameters: None
  * Returns: None
  */
-static void submit( rcb * r ) {
-  assert( r );                     /* sanity check */
-
+static void submit(struct rcb* r) {
   r->max = QUANTUM;                /* set quantum */
-  queue_enqueue( &ready, r );      /* enqueue */
+  queue_enqueue(&ready, r);        /* enqueue */
 }
 
 
@@ -44,6 +44,6 @@ static void submit( rcb * r ) {
  * Returns: A positive integer file decriptor to the next clients connection,
  *          or -1 if no client is waiting.
  */
-static rcb * get_next( void ) {
-  return queue_dequeue( &ready );   /* dequeue and return */
+static struct rcb* get_next(void) {
+  return queue_dequeue(&ready);   /* dequeue and return */
 }

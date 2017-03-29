@@ -7,8 +7,8 @@
 typedef void (*submit_func)(struct rcb*);
 typedef struct rcb* (*get_next_func)(void);
 extern void scheduler_init(char* selected_algorithm);
-extern void scheduler_submit(struct rcb* request_control_block);
-extern struct rcb* scheduler_get_next();
+extern void submit_to_scheduler(struct rcb* request_control_block);
+extern struct rcb* get_from_scheduler();
 
 /* scheduler struct */
 struct scheduler_info {

@@ -34,11 +34,11 @@ extern void scheduler_init(char* selected_algorithm) {
 }
 
 /* Submits a RCB to the scheduler */
-extern void scheduler_submit(struct rcb* request_control_block) {
+extern void submit_to_scheduler(struct rcb* request_control_block) {
     selected_scheduler->submit(request_control_block);
 }
 
 /* Removes the RCB and gets the next RCB */
-extern struct rcb* scheduler_get_next() {
+extern struct rcb* get_from_scheduler() {
     return selected_scheduler->get_next();
 }

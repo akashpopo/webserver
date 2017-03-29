@@ -183,12 +183,12 @@ int main( int argc, char **argv ) {
             for (fd = network_open(); fd >= 0; fd = network_open()) {
                 request = serve_client(fd);
                 if (request) {
-                    scheduler_submit(request);
+                    submit_to_scheduler(request);
                 }
             }
-            request = scheduler_get_next();
+            request = get_from_scheduler();
             if (request && serve(request)) {
-                scheduler_submit(request);
+                submit_to_scheduler(request);
             } else if (request) {
                 request->next_rcb = free_rcb;
                 free_rcb = request;

@@ -5,17 +5,20 @@
  */
 
 #include <stdio.h>
-#include <assert.h>
 
 #include "rcb.h"
 #include "scheduler.h"
 
-static void submit( rcb * r );
-static rcb * get_next( void );
+static void submit(struct rcb* r);
+static struct rcb* get_next(void);
 
-vss sjf_scheduler = { "SJF", &submit, &get_next };
+struct scheduler_info sjf_scheduler = {
+    "SJF",
+    &submit,
+    &get_next
+};
 
-static rcb *head; /* head of ready queue */
+static struct rcb *head; /* head of ready queue */
 
 /* This function checks if there are any web clients waiting to connect.
  *    If one or more clients are waiting to connect, this function returns.
@@ -24,24 +27,21 @@ static rcb *head; /* head of ready queue */
  * Parameters: None
  * Returns: None
  */
-static void submit( rcb * r ) {
-  rcb *tmp;
+static void submit(struct rcb* r) {
+    struct rcb *tmp;
 
-  assert( r );                               /* sanity check */
+    /* insert rcb into priority queue, based on # of bytes left to send. */
+    if(!head || (r->left < head->left)) {  /* before head */
+        r->next = head;
+        head = r;
+    } else {                                   /* after head */
+        /* walk the list until the next rcb contains a lower priority request */
+        for(tmp = head; tmp->next && (tmp->next->left <= r->left); tmp = tmp->next);
 
-  /* insert rcb into priority queue, based on # of bytes left to send.
-   */
-  if( !head || ( r->left < head->left ) ) {  /* before head */
-    r->next = head;
-    head = r;
-  } else {                                   /* after head */
-    /* walk the list until the next rcb contains a lower priority request */
-    for(tmp = head; tmp->next && (tmp->next->left <= r->left); tmp = tmp->next);
-
-    /* insert RCB at this point */
-    r->next = tmp->next;
-    tmp->next = r;
-  }
+        /* insert RCB at this point */
+        r->next = tmp->next;
+        tmp->next = r;
+    }
 }
 
 
@@ -54,11 +54,11 @@ static void submit( rcb * r ) {
  * Returns: A positive integer file decriptor to the next clients connection,
  *          or -1 if no client is waiting.
  */
-static rcb * get_next( void ) {
-  rcb *r = head;                 /* remove first item from the queue */
-  if( r ) {                      /* if queue is not empty */
-    head = head->next;           /* unlink head */
-    r->next = NULL;
-  }
-  return r;
+static struct rcb* get_next(void) {
+    struct rcb* r = head;        /* remove first item from the queue */
+    if(r) {                      /* if queue is not empty */
+        head = head->next;       /* unlink head */
+        r->next = NULL;
+    }
+    return r;
 }

@@ -21,10 +21,10 @@
  * the next item in the queue, or NULL if queue is empty.
  */
 
-typedef struct _queue {
-  rcb * head;              /* queue head */
-  rcb * tail;              /* queue tail */
-} queue;
+struct queue {
+    struct rcb* head;              /* queue head */
+    struct rcb* tail;              /* queue tail */
+};
 
 /* This function takes a pointer to a queue and a pointer to an RCB
  *    and enqueues the RCB onto the queue.
@@ -32,7 +32,7 @@ typedef struct _queue {
                r : pointer to a RCB
  * Returns: None
  */
-extern void queue_enqueue( queue * q, rcb * r );
+extern void queue_enqueue(struct queue* q, struct rcb* r);
 
 
 /* This function takes a pointer to a queue and, and removes and returns
@@ -40,6 +40,6 @@ extern void queue_enqueue( queue * q, rcb * r );
  * Parameters: q: pointer to queue
  * Returns: Pointer to RCB removed from the queue.
  */
-extern rcb * queue_dequeue( queue * q );
+extern struct rcb* queue_dequeue(struct queue* q);
 
 #endif

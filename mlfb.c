@@ -5,7 +5,6 @@
  */
 
 #include <stdio.h>
-#include <assert.h>
 
 #include "rcb.h"
 #include "scheduler.h"
@@ -14,11 +13,15 @@
 #define HIGH_PRIORITY_QUANTUM 8192
 #define LOW_PRIORITY_QUANTUM 65536
 
-static void submit( rcb * r );
-static rcb * get_next( void );
-static queue ready[3];
+static void submit(struct rcb* r);
+static struct rcb* get_next(void);
+static struct queue ready[3];
 
-vss mlfb_scheduler = { "MLFB", &submit, &get_next };
+struct scheduler_info mlfb_scheduler = {
+    "MLFB",
+    &submit,
+    &get_next
+};
 
 
 /* This function checks if there are any web clients waiting to connect.
@@ -28,18 +31,16 @@ vss mlfb_scheduler = { "MLFB", &submit, &get_next };
  * Parameters: None
  * Returns: None
  */
-static void submit( rcb * r ) {
-  assert( r );
-
-  if( r->max == 0 ) {                   /* select queue based on last send */
-    r->max = HIGH_PRIORITY_QUANTUM;     /* set quantum */
-    queue_enqueue( &ready[0], r );      /* add to queue */
-  } else if( r->max == HIGH_PRIORITY_QUANTUM ) {
-    r->max = LOW_PRIORITY_QUANTUM;
-    queue_enqueue( &ready[1], r );
-  } else {
-    queue_enqueue( &ready[2], r );
-  }
+static void submit(struct rcb* r) {
+    if(r->max == 0) {                     /* select queue based on last send */
+        r->max = HIGH_PRIORITY_QUANTUM;   /* set quantum */
+        queue_enqueue(&ready[0], r);      /* add to queue */
+    } else if(r->max == HIGH_PRIORITY_QUANTUM) {
+        r->max = LOW_PRIORITY_QUANTUM;
+        queue_enqueue(&ready[1], r);
+    } else {
+        queue_enqueue(&ready[2], r);
+    }
 }
 
 
@@ -52,15 +53,13 @@ static void submit( rcb * r ) {
  * Returns: A positive integer file decriptor to the next clients connection,
  *          or -1 if no client is waiting.
  */
-static rcb * get_next( void ) {
-  int i;
-  rcb *r;
-
-  for( i = 0; i < 3; i++ ) {          /* loop throught all 3 queues */
-    r = queue_dequeue( &ready[i] );   /* attempt to dequeue */
-    if( r ) {                         /* if success, then use RCB */
-      break;
+static struct rcb* get_next( void ) {
+    struct rcb* r;
+    for (int i = 0; i < 3; i++) {       /* loop throught all 3 queues */
+        r = queue_dequeue(&ready[i]);   /* attempt to dequeue */
+        if (r) {                        /* if success, then use RCB */
+            break;
+        }
     }
-  }
-  return r;
+    return r;
 }

@@ -4,14 +4,14 @@
 #include "scheduler.h"
 
 /* function prototypes */
-static void submit(struct rcb* req_control_block);
-static struct rcb* get_next(void);
+static void submit_rcb(struct rcb* req_control_block);
+static struct rcb* get_next_rcb(void);
 
 /* initialize the SJF scheduler struct */
 struct scheduler_info shortest_job_first_scheduler = {
     "SJF",
-    &submit,
-    &get_next
+    &submit_rcb,
+    &get_next_rcb
 };
 
 /* keep track of the RCB's head */
@@ -19,7 +19,7 @@ static struct rcb *rcb_head;
 
 
 /* inserts an RCB to the queue */
-static void submit(struct rcb* req_control_block) {
+static void submit_rcb(struct rcb* req_control_block) {
     struct rcb *temp_rcb;
 
     /* insert rcb into priority queue, based on # of bytes left to send. */
@@ -36,7 +36,7 @@ static void submit(struct rcb* req_control_block) {
 }
 
 /* removes the current RCB and gets the next RCB */
-static struct rcb* get_next(void) {
+static struct rcb* get_next_rcb(void) {
     struct rcb* req_control_block = rcb_head;        /* remove first item from the queue */
     if(req_control_block) {                      /* if queue is not empty */
         rcb_head = rcb_head->next_rcb;   /* unlink head */

@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "rcb.h"
+#include "request_control_block.h"
 #include "queue.h"
 
 /* enqueues an RCB */

@@ -1,4 +1,4 @@
-#include "rcb.h"
+#include "request_control_block.h"
 
 /* Constants */
 #define NUM_SUPPORTED_ALGORITHMS 3

@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "rcb.h"
+#include "request_control_block.h"
 #include "scheduler.h"
 
 /* declare supported schedulers */

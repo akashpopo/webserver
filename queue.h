@@ -1,7 +1,7 @@
 #ifndef QUEUE
 #define QUEUE /* singleton pattern */
 
-#include "rcb.h"
+#include "request_control_block.h"
 
 /* queue structure that keeps track of the RCB head and tail */
 struct queue {

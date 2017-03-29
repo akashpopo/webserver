@@ -1,7 +1,7 @@
 # Targets & general dependencies
 PROGRAM = sws
-HEADERS = network.h scheduler.h rcb.h queue.h
-OBJS = network.o sws.o sjf.o rr.o mlfb.o scheduler.o queue.o
+HEADERS = network.h scheduler.h request_control_block.h queue.h
+OBJS = network.o sws.o scheduling_algorithm_sjf.o scheduling_algorithm_rr.o scheduling_algorithm_mlfb.o scheduler.o queue.o
 ADD_OBJS =
 
 # compilers, linkers, utilities, and flags

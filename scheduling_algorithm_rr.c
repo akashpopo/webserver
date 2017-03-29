@@ -15,7 +15,7 @@ static struct rcb* get_next(void);
 static struct scheduler_queue round_robin;
 
 /* initialize the RR scheduler struct */
-struct scheduler_info rr_scheduler = {
+struct scheduler_info round_robin_scheduler = {
     "RR",
     &submit,
     &get_next

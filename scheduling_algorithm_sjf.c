@@ -8,7 +8,7 @@ static void submit(struct rcb* req_control_block);
 static struct rcb* get_next(void);
 
 /* initialize the SJF scheduler struct */
-struct scheduler_info sjf_scheduler = {
+struct scheduler_info shortest_job_first_scheduler = {
     "SJF",
     &submit,
     &get_next

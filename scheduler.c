@@ -6,15 +6,15 @@
 #include "scheduler.h"
 
 /* declare supported schedulers */
-extern struct scheduler_info sjf_scheduler;
-extern struct scheduler_info rr_scheduler;
-extern struct scheduler_info mlfb_scheduler;
+extern struct scheduler_info shortest_job_first_scheduler;
+extern struct scheduler_info round_robin_scheduler;
+extern struct scheduler_info multilevel_scheduler;
 
 /* setup an array of all supported schedulers */
 static struct scheduler_info* supported_schedulers[] = {
-    &sjf_scheduler,
-    &rr_scheduler,
-    &mlfb_scheduler
+    &shortest_job_first_scheduler,
+    &round_robin_scheduler,
+    &multilevel_scheduler
 };
 
 /* keep track of the selected scheduler */

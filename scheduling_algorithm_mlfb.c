@@ -16,7 +16,7 @@ static struct rcb* get_next(void);
 static struct scheduler_queue multilevel[3];
 
 /* initialize the MLFB scheduler struct */
-struct scheduler_info mlfb_scheduler = {
+struct scheduler_info multilevel_scheduler = {
     "MLFB",
     &submit,
     &get_next

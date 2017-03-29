@@ -26,7 +26,7 @@ static void submit(struct rcb* r) {
     if(!head || (r->bytes_remaining < head->bytes_remaining)) {  /* before head */
         r->next_rcb = head;
         head = r;
-    } else {                                   /* after head */
+    } else {                                                     /* after head */
         /* walk the list until the next rcb contains a lower priority request */
         for(tmp = head; tmp->next_rcb && (tmp->next_rcb->bytes_remaining <= r->bytes_remaining); tmp = tmp->next_rcb);
         /* insert RCB at this point */
@@ -39,7 +39,7 @@ static void submit(struct rcb* r) {
 static struct rcb* get_next(void) {
     struct rcb* r = head;        /* remove first item from the queue */
     if(r) {                      /* if queue is not empty */
-        head = head->next_rcb;       /* unlink head */
+        head = head->next_rcb;   /* unlink head */
         r->next_rcb = NULL;
     }
     return r;

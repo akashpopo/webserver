@@ -1,5 +1,5 @@
 #ifndef QUEUE
-#define QUEUE
+#define QUEUE /* singleton pattern */
 
 #include "rcb.h"
 

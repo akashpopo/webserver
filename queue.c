@@ -1,75 +1,46 @@
-#include <stdlib.h>
-#include <stdio.h>
+/*
+ * File: queue.c
+ * Author: Alex Brodsky
+ * Purpose:  This implements a general RCB queue with a linked list
+ */
 
+#include <stdio.h>
+#include <assert.h>
+
+#include "rcb.h"
 #include "queue.h"
 
-Queue *create_queue(int limit) {
-    Queue *queue = (Queue*) malloc(sizeof (Queue));
-    if (queue == NULL) {
-        return NULL;
-    }
-    if (limit <= 0) {
-        limit = 65535;
-    }
-    queue->limit = limit;
-    queue->size = 0;
-    queue->head = NULL;
-    queue->tail = NULL;
 
-    return queue;
+/* This function takes a pointer to a queue and a pointer to an RCB
+ *    and enqueues the RCB onto the queue.
+ * Parameters: q : pointer to a queue
+               r : pointer to a RCB
+ * Returns: None
+ */
+extern void queue_enqueue( queue * q, rcb * r ) {
+  assert( q );
+  assert( r );
+
+  r->next = NULL;
+  if( !q->head ) {         /* if emptty */
+    q->head = r;           /* set head */
+  } else {                 /* else */
+    q->tail->next = r;     /* add to tail */
+  }
+  q->tail = r;             /* set tail */
 }
 
-void destruct_queue(Queue *queue) {
-    NODE *pN;
-    while (!is_empty(queue)) {
-        pN = dequeue(queue);
-        free(pN);
-    }
-    free(queue);
-}
+/* This function takes a pointer to a queue and, and removes and returns
+ *    the first RCB in the queue.  It returns NULL if the queue is empty.
+ * Parameters: q: pointer to queue
+ * Returns: Pointer to RCB removed from the queue.
+ */
+extern rcb * queue_dequeue( queue * q ) {
+  rcb *r = q->head;
 
-int enqueue(Queue *pQueue, NODE *item) {
-    /* Bad parameter */
-    if ((pQueue == NULL) || (item == NULL)) {
-        return FALSE;
-    }
-    // if(pQueue->limit != 0)
-    if (pQueue->size >= pQueue->limit) {
-        return FALSE;
-    }
-    /*the queue is empty*/
-    item->prev = NULL;
-    if (pQueue->size == 0) {
-        pQueue->head = item;
-        pQueue->tail = item;
-
-    } else {
-        /*adding item to the end of the queue*/
-        pQueue->tail->prev = item;
-        pQueue->tail = item;
-    }
-    pQueue->size++;
-    return TRUE;
-}
-
-NODE * dequeue(Queue *pQueue) {
-    /*the queue is empty or bad param*/
-    NODE *item;
-    if (is_empty(pQueue))
-        return NULL;
-    item = pQueue->head;
-    pQueue->head = (pQueue->head)->prev;
-    pQueue->size--;
-    return item;
-}
-
-int is_empty(Queue* pQueue) {
-    if (pQueue == NULL) {
-        return FALSE;
-    }
-    if (pQueue->size == 0) {
-        return TRUE;
-    } else {
-        return FALSE;
-    }
+  if( q->head ) {             /* if not empty */
+    q->head = q->head->next;  /* remove first elemenet */
+    r->next = NULL;
+  }
+  return r;
 }

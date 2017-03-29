@@ -6,15 +6,15 @@
 #include "scheduler.h"
 
 /* declare supported schedulers */
-extern struct scheduler_info sjf_scheduler;
-extern struct scheduler_info rr_scheduler;
-extern struct scheduler_info mlfb_scheduler;
+extern struct scheduler_info shortest_job_first_scheduler;
+extern struct scheduler_info round_robin_scheduler;
+extern struct scheduler_info multilevel_scheduler;
 
 /* setup an array of all supported schedulers */
 static struct scheduler_info* supported_schedulers[] = {
-    &sjf_scheduler,
-    &rr_scheduler,
-    &mlfb_scheduler
+    &shortest_job_first_scheduler,
+    &round_robin_scheduler,
+    &multilevel_scheduler
 };
 
 /* keep track of the selected scheduler */
@@ -34,11 +34,11 @@ extern void scheduler_init(char* selected_algorithm) {
 }
 
 /* Submits a RCB to the scheduler */
-extern void scheduler_submit(struct rcb* request_control_block) {
-    selected_scheduler->submit(request_control_block);
+extern void submit_to_scheduler(struct rcb* request_control_block) {
+    selected_scheduler->submit_rcb(request_control_block);
 }
 
 /* Removes the RCB and gets the next RCB */
-extern struct rcb* scheduler_get_next() {
-    return selected_scheduler->get_next();
+extern struct rcb* get_from_scheduler() {
+    return selected_scheduler->get_next_rcb();
 }

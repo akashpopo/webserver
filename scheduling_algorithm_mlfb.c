@@ -2,47 +2,47 @@
 
 #include "request_control_block.h"
 #include "scheduler.h"
-#include "queue.h"
+#include "scheduler_queue.h"
 
 /* constants */
 #define HIGH_PRIORITY_QUANTUM 8192
 #define LOW_PRIORITY_QUANTUM 65536
 
 /* function prototypes */
-static void submit(struct rcb* r);
-static struct rcb* get_next(void);
+static void submit_rcb(struct rcb* req_control_block);
+static struct rcb* get_next_rcb(void);
 
 /* initalize an array of 3 queues */
-static struct queue ready[3];
+static struct scheduler_queue multilevel[3];
 
 /* initialize the MLFB scheduler struct */
-struct scheduler_info mlfb_scheduler = {
+struct scheduler_info multilevel_scheduler = {
     "MLFB",
-    &submit,
-    &get_next
+    &submit_rcb,
+    &get_next_rcb
 };
 
 /* inserts an RCB to the queue */
-static void submit(struct rcb* r) {
-    if(r->bytes_max_allowed == 0) {                     /* select queue based on last send */
-        r->bytes_max_allowed = HIGH_PRIORITY_QUANTUM;   /* set quantum */
-        queue_enqueue(&ready[0], r);                    /* add to queue */
-    } else if(r->bytes_max_allowed == HIGH_PRIORITY_QUANTUM) {
-        r->bytes_max_allowed = LOW_PRIORITY_QUANTUM;
-        queue_enqueue(&ready[1], r);
+static void submit_rcb(struct rcb* req_control_block) {
+    if(req_control_block->bytes_max_allowed == 0) {                     /* select queue based on last send */
+        req_control_block->bytes_max_allowed = HIGH_PRIORITY_QUANTUM;   /* set quantum */
+        scheduler_enqueue(&multilevel[0], req_control_block);                    /* add to queue */
+    } else if(req_control_block->bytes_max_allowed == HIGH_PRIORITY_QUANTUM) {
+        req_control_block->bytes_max_allowed = LOW_PRIORITY_QUANTUM;
+        scheduler_enqueue(&multilevel[1], req_control_block);
     } else {
-        queue_enqueue(&ready[2], r);
+        scheduler_enqueue(&multilevel[2], req_control_block);
     }
 }
 
 /* removes the current RCB and gets the next RCB */
-static struct rcb* get_next(void) {
-    struct rcb* r;
+static struct rcb* get_next_rcb(void) {
+    struct rcb* req_control_block;
     for (int i = 0; i < 3; i++) {       /* loop throught all 3 queues */
-        r = queue_dequeue(&ready[i]);   /* attempt to dequeue */
-        if (r) {                        /* if success, then use RCB */
+        req_control_block = scheduler_dequeue(&multilevel[i]);   /* attempt to dequeue */
+        if (req_control_block) {                        /* if success, then use RCB */
             break;
         }
     }
-    return r;
+    return req_control_block;
 }

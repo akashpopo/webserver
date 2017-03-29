@@ -8,24 +8,21 @@
 #include "scheduler.h"
 
 /* constants */
-#define MAX_HTTP_SIZE 8192   /* size of buffer to allocate */
-#define MAX_REQS 100         /* max # of requests */
+#define MAX_HTTP_SIZE 8192
+#define MAX_REQUESTS 100
 #define TRUE 1
 #define FALSE 0
 
 /* global variables */
-static struct rcb requests[MAX_REQS];      /* request table */
+static struct rcb request_table[MAX_REQUESTS];      /* request table */
 static struct rcb* free_rcb;
-static int next_req = 1;                   /* request counter */
+static int request_counter = 1;
 
 
 /* This function takes a file handle to a client, reads in the request,
- *    parses the request, and sends back the requested file.  If the
- *    request is improper or the file is not available, the appropriate
- *    error is sent back.
- * Parameters:
- *             fd : the file descriptor to the client connection
- * Returns: None
+ * parses the request, and sends back the requested file.  If the
+ * request is improper or the file is not available, the appropriate
+ * error is sent back.
  */
 static struct rcb* serve_client(int fd) {
     static char *buffer;                              /* request buffer */
@@ -36,9 +33,9 @@ static struct rcb* serve_client(int fd) {
     FILE *fin;                                        /* input file handle */
     int len = 0;                                      /* length of data read */
     int left = MAX_HTTP_SIZE;                         /* amount of buffer left */
-    struct rcb* r;                                           /* new rcb */
+    struct rcb* r;                                    /* new rcb */
 
-    if(!buffer) {                                   /* 1st time, alloc buffer */
+    if(!buffer) {                                     /* 1st time, alloc buffer */
         buffer = malloc(MAX_HTTP_SIZE);
         if(!buffer) {                                 /* error check */
             perror( "Error while allocating memory" );
@@ -49,9 +46,9 @@ static struct rcb* serve_client(int fd) {
     memset(buffer, 0, MAX_HTTP_SIZE);
     for(tmp = buffer; !strchr(tmp, '\n'); left -= len) { /* read req line */
         tmp += len;
-        len = read(fd, tmp, left);                    /* read req from client */
-        if(len <= 0) {                                /* if read incomplete */
-            perror("Error while reading request");      /* no need to go on */
+        len = read(fd, tmp, left);                       /* read req from client */
+        if(len <= 0) {                                   /* if read incomplete */
+            perror("Error while reading request");       /* no need to go on */
             close(fd);
             return NULL;
         }
@@ -61,38 +58,38 @@ static struct rcb* serve_client(int fd) {
     *   GET /foo/bar/qux.html HTTP/1.1
     * We want the second token (the file path).
     */
-    tmp = strtok_r(buffer, " ", &brk);              /* parse request */
+    tmp = strtok_r(buffer, " ", &brk);                   /* parse request */
     if(tmp && !strcmp("GET", tmp)) {
         req = strtok_r(NULL, " ", &brk);
     }
 
-    if(!req) {                                      /* is req valid? */
+    if(!req) {                                           /* is req valid? */
         len = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
-        write(fd, buffer, len);                       /* if not, send err */
-    } else {                                          /* if so, open file */
-        req++;                                          /* skip leading / */
-        fin = fopen(req, "r");                        /* open file */
-        if(!fin) {                                    /* check if successful */
+        write(fd, buffer, len);                          /* if not, send err */
+    } else {                                             /* if so, open file */
+        req++;                                           /* skip leading / */
+        fin = fopen(req, "r");                           /* open file */
+        if(!fin) {                                       /* check if successful */
             len = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
-            write(fd, buffer, len);                     /* if not, send err */
-        } else if(!fstat( fileno( fin ), &st)) {     /* if so, start request */
+            write(fd, buffer, len);                      /* if not, send err */
+        } else if(!fstat( fileno( fin ), &st)) {         /* if so, start request */
             len = sprintf(buffer, "HTTP/1.1 200 OK\n\n");/* send success code */
             write(fd, buffer, len);
 
             r = free_rcb;                                 /* allocate RCB */
-            free_rcb = free_rcb->next;
+            free_rcb = free_rcb->next_rcb;
             memset(r, 0, sizeof(struct rcb));
 
-            r->seq = next_req++;                          /* init RCB */
-            r->client = fd;
+            r->sequence_number = request_counter++;       /* init RCB */
+            r->client_file_descriptor = fd;
             r->file = fin;
-            r->left = st.st_size;
+            r->bytes_remaining = st.st_size;
             return r;                                     /* return rcb */
         }
         fclose(fin);
     }
-    close(fd);                                     /* close client connectuin*/
-    return NULL;                                     /* not a valid request */
+    close(fd);       /* close client connection */
+    return NULL;     /* not a valid request */
 }
 
 
@@ -117,13 +114,13 @@ static int serve(struct rcb* req) {
         }
     }
 
-    n = req->left;                                     /* compute send amount */
+    n = req->bytes_remaining;                                     /* compute send amount */
     if (!n) {                                          /* if 0, we're done */
         return 0;
-    } else if (req->max && (req->max < n)) {           /* if there is limit */
-        n = req->max;                                  /* send upto the limit */
+    } else if (req->bytes_max_allowed && (req->bytes_max_allowed < n)) {           /* if there is limit */
+        n = req->bytes_max_allowed;                                  /* send upto the limit */
     }
-    req->last = n;                                     /* remember send size */
+    req->bytes_last_sent = n;                                     /* remember send size */
 
     do {                                               /* loop, read & send file */
         len = n < MAX_HTTP_SIZE ? n : MAX_HTTP_SIZE;   /* how much to read */
@@ -132,17 +129,17 @@ static int serve(struct rcb* req) {
             perror("Error while reading file");
             return 0;
         } else if (len > 0) {                          /* if none, send chunk */
-            len = write(req->client, buffer, len);
+            len = write(req->client_file_descriptor, buffer, len);
             if (len < 1) {                             /* check for errors */
                 perror("Error while writing to client");
                 return 0;
             }
-            req->left -= len;                          /* reduce what remains */
+            req->bytes_remaining -= len;                          /* reduce what remains */
             n -= len;
         }
     } while((n > 0) && (len == MAX_HTTP_SIZE));        /* the last chunk < 8192 */
 
-    return req->left > 0;                              /* return true if not done */
+    return req->bytes_remaining > 0;                              /* return true if not done */
 }
 
 
@@ -174,9 +171,9 @@ int main( int argc, char **argv ) {
     scheduler_init(argv[2]);   //argv[2] is the char* scheduler algorithm
     network_init(port);
 
-    free_rcb = requests;
-    for (int i = 0; i < MAX_REQS-1; i++) {
-        requests[i].next = &requests[i+1];
+    free_rcb = request_table;
+    for (int i = 0; i < MAX_REQUESTS-1; i++) {
+        request_table[i].next_rcb = &request_table[i+1];
     }
 
     /* infinite loop */
@@ -193,11 +190,11 @@ int main( int argc, char **argv ) {
             if (request && serve(request)) {
                 scheduler_submit(request);
             } else if (request) {
-                request->next = free_rcb;
+                request->next_rcb = free_rcb;
                 free_rcb = request;
                 fclose(request->file);
-                close(request->client);
-                printf("Request %d completed.\n", request->seq);
+                close(request->client_file_descriptor);
+                printf("Request %d completed.\n", request->sequence_number);
                 fflush(stdout);
             }
         } while(request);

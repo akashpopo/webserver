@@ -8,8 +8,8 @@
 #include "scheduler.h"
 
 /* constants */
-#define MAX_HTTP_SIZE 8192   /* size of buffer to allocate */
-#define MAX_REQUESTS 100     /* max # of requests */
+#define MAX_HTTP_SIZE 8192
+#define MAX_REQUESTS 100
 #define TRUE 1
 #define FALSE 0
 

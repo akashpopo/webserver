@@ -8,11 +8,11 @@
 #define QUANTUM 8192
 
 /* function prototypes */
-static void submit(struct rcb* r);
+static void submit(struct rcb* req_control_block);
 static struct rcb* get_next(void);
 
 /* initialize the queue */
-static struct scheduler_queue ready;
+static struct scheduler_queue round_robin;
 
 /* initialize the RR scheduler struct */
 struct scheduler_info rr_scheduler = {
@@ -22,12 +22,12 @@ struct scheduler_info rr_scheduler = {
 };
 
 /* inserts an RCB to the queue */
-static void submit(struct rcb* r) {
-  r->bytes_max_allowed = QUANTUM;                /* set quantum */
-  scheduler_enqueue(&ready, r);        /* enqueue */
+static void submit(struct rcb* req_control_block) {
+  req_control_block->bytes_max_allowed = QUANTUM;                /* set quantum */
+  scheduler_enqueue(&round_robin, req_control_block);        /* enqueue */
 }
 
 /* removes the current RCB and gets the next RCB */
 static struct rcb* get_next(void) {
-  return scheduler_dequeue(&ready);   /* dequeue and return */
+  return scheduler_dequeue(&round_robin);   /* dequeue and return */
 }

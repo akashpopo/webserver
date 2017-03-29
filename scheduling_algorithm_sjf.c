@@ -4,7 +4,7 @@
 #include "scheduler.h"
 
 /* function prototypes */
-static void submit(struct rcb* r);
+static void submit(struct rcb* req_control_block);
 static struct rcb* get_next(void);
 
 /* initialize the SJF scheduler struct */
@@ -15,32 +15,32 @@ struct scheduler_info sjf_scheduler = {
 };
 
 /* keep track of the RCB's head */
-static struct rcb *head;
+static struct rcb *rcb_head;
 
 
 /* inserts an RCB to the queue */
-static void submit(struct rcb* r) {
-    struct rcb *tmp;
+static void submit(struct rcb* req_control_block) {
+    struct rcb *temp_rcb;
 
     /* insert rcb into priority queue, based on # of bytes left to send. */
-    if(!head || (r->bytes_remaining < head->bytes_remaining)) {  /* before head */
-        r->next_rcb = head;
-        head = r;
+    if(!rcb_head || (req_control_block->bytes_remaining < rcb_head->bytes_remaining)) {  /* before head */
+        req_control_block->next_rcb = rcb_head;
+        rcb_head = req_control_block;
     } else {                                                     /* after head */
         /* walk the list until the next rcb contains a lower priority request */
-        for(tmp = head; tmp->next_rcb && (tmp->next_rcb->bytes_remaining <= r->bytes_remaining); tmp = tmp->next_rcb);
+        for(temp_rcb = rcb_head; temp_rcb->next_rcb && (temp_rcb->next_rcb->bytes_remaining <= req_control_block->bytes_remaining); temp_rcb = temp_rcb->next_rcb);
         /* insert RCB at this point */
-        r->next_rcb = tmp->next_rcb;
-        tmp->next_rcb = r;
+        req_control_block->next_rcb = temp_rcb->next_rcb;
+        temp_rcb->next_rcb = req_control_block;
     }
 }
 
 /* removes the current RCB and gets the next RCB */
 static struct rcb* get_next(void) {
-    struct rcb* r = head;        /* remove first item from the queue */
-    if(r) {                      /* if queue is not empty */
-        head = head->next_rcb;   /* unlink head */
-        r->next_rcb = NULL;
+    struct rcb* req_control_block = rcb_head;        /* remove first item from the queue */
+    if(req_control_block) {                      /* if queue is not empty */
+        rcb_head = rcb_head->next_rcb;   /* unlink head */
+        req_control_block->next_rcb = NULL;
     }
-    return r;
+    return req_control_block;
 }

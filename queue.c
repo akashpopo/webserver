@@ -11,11 +11,11 @@
  * Returns: None
  */
 extern void queue_enqueue(struct queue* q, struct rcb* r) {
-    r->next = NULL;
+    r->next_rcb = NULL;
     if(!q->head) {         /* if empty */
         q->head = r;       /* set head */
     } else {
-        q->tail->next = r; /* add to tail */
+        q->tail->next_rcb = r; /* add to tail */
     }
     q->tail = r;           /* set tail */
 }
@@ -28,8 +28,8 @@ extern void queue_enqueue(struct queue* q, struct rcb* r) {
 extern struct rcb* queue_dequeue(struct queue* q) {
     struct rcb *r = q->head;
     if(q->head) {                 /* if not empty */
-        q->head = q->head->next;  /* remove first elemenet */
-        r->next = NULL;
+        q->head = q->head->next_rcb;  /* remove first elemenet */
+        r->next_rcb = NULL;
     }
     return r;
 }

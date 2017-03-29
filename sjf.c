@@ -31,16 +31,16 @@ static void submit(struct rcb* r) {
     struct rcb *tmp;
 
     /* insert rcb into priority queue, based on # of bytes left to send. */
-    if(!head || (r->left < head->left)) {  /* before head */
-        r->next = head;
+    if(!head || (r->bytes_remaining < head->bytes_remaining)) {  /* before head */
+        r->next_rcb = head;
         head = r;
     } else {                                   /* after head */
         /* walk the list until the next rcb contains a lower priority request */
-        for(tmp = head; tmp->next && (tmp->next->left <= r->left); tmp = tmp->next);
+        for(tmp = head; tmp->next_rcb && (tmp->next_rcb->bytes_remaining <= r->bytes_remaining); tmp = tmp->next_rcb);
 
         /* insert RCB at this point */
-        r->next = tmp->next;
-        tmp->next = r;
+        r->next_rcb = tmp->next_rcb;
+        tmp->next_rcb = r;
     }
 }
 
@@ -57,8 +57,8 @@ static void submit(struct rcb* r) {
 static struct rcb* get_next(void) {
     struct rcb* r = head;        /* remove first item from the queue */
     if(r) {                      /* if queue is not empty */
-        head = head->next;       /* unlink head */
-        r->next = NULL;
+        head = head->next_rcb;       /* unlink head */
+        r->next_rcb = NULL;
     }
     return r;
 }

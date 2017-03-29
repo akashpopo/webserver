@@ -30,7 +30,7 @@ struct scheduler_info rr_scheduler = {
  * Returns: None
  */
 static void submit(struct rcb* r) {
-  r->max = QUANTUM;                /* set quantum */
+  r->bytes_max_allowed = QUANTUM;                /* set quantum */
   queue_enqueue(&ready, r);        /* enqueue */
 }
 

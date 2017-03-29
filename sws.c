@@ -16,7 +16,7 @@
 /* global variables */
 static struct rcb requests[MAX_REQS];      /* request table */
 static struct rcb* free_rcb;
-static int next_req = 1;                   /* request counter */
+static int request_counter = 1;                   /* request counter */
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -80,13 +80,13 @@ static struct rcb* serve_client(int fd) {
             write(fd, buffer, len);
 
             r = free_rcb;                                 /* allocate RCB */
-            free_rcb = free_rcb->next;
+            free_rcb = free_rcb->next_rcb;
             memset(r, 0, sizeof(struct rcb));
 
-            r->seq = next_req++;                          /* init RCB */
-            r->client = fd;
+            r->sequence_number = request_counter++;                          /* init RCB */
+            r->client_file_descriptor = fd;
             r->file = fin;
-            r->left = st.st_size;
+            r->bytes_remaining = st.st_size;
             return r;                                     /* return rcb */
         }
         fclose(fin);
@@ -117,13 +117,13 @@ static int serve(struct rcb* req) {
         }
     }
 
-    n = req->left;                                     /* compute send amount */
+    n = req->bytes_remaining;                                     /* compute send amount */
     if (!n) {                                          /* if 0, we're done */
         return 0;
-    } else if (req->max && (req->max < n)) {           /* if there is limit */
-        n = req->max;                                  /* send upto the limit */
+    } else if (req->bytes_max_allowed && (req->bytes_max_allowed < n)) {           /* if there is limit */
+        n = req->bytes_max_allowed;                                  /* send upto the limit */
     }
-    req->last = n;                                     /* remember send size */
+    req->bytes_last_sent = n;                                     /* remember send size */
 
     do {                                               /* loop, read & send file */
         len = n < MAX_HTTP_SIZE ? n : MAX_HTTP_SIZE;   /* how much to read */
@@ -132,17 +132,17 @@ static int serve(struct rcb* req) {
             perror("Error while reading file");
             return 0;
         } else if (len > 0) {                          /* if none, send chunk */
-            len = write(req->client, buffer, len);
+            len = write(req->client_file_descriptor, buffer, len);
             if (len < 1) {                             /* check for errors */
                 perror("Error while writing to client");
                 return 0;
             }
-            req->left -= len;                          /* reduce what remains */
+            req->bytes_remaining -= len;                          /* reduce what remains */
             n -= len;
         }
     } while((n > 0) && (len == MAX_HTTP_SIZE));        /* the last chunk < 8192 */
 
-    return req->left > 0;                              /* return true if not done */
+    return req->bytes_remaining > 0;                              /* return true if not done */
 }
 
 
@@ -176,7 +176,7 @@ int main( int argc, char **argv ) {
 
     free_rcb = requests;
     for (int i = 0; i < MAX_REQS-1; i++) {
-        requests[i].next = &requests[i+1];
+        requests[i].next_rcb = &requests[i+1];
     }
 
     /* infinite loop */
@@ -193,11 +193,11 @@ int main( int argc, char **argv ) {
             if (request && serve(request)) {
                 scheduler_submit(request);
             } else if (request) {
-                request->next = free_rcb;
+                request->next_rcb = free_rcb;
                 free_rcb = request;
                 fclose(request->file);
-                close(request->client);
-                printf("Request %d completed.\n", request->seq);
+                close(request->client_file_descriptor);
+                printf("Request %d completed.\n", request->sequence_number);
                 fflush(stdout);
             }
         } while(request);

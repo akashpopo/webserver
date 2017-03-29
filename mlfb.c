@@ -32,11 +32,11 @@ struct scheduler_info mlfb_scheduler = {
  * Returns: None
  */
 static void submit(struct rcb* r) {
-    if(r->max == 0) {                     /* select queue based on last send */
-        r->max = HIGH_PRIORITY_QUANTUM;   /* set quantum */
+    if(r->bytes_max_allowed == 0) {                     /* select queue based on last send */
+        r->bytes_max_allowed = HIGH_PRIORITY_QUANTUM;   /* set quantum */
         queue_enqueue(&ready[0], r);      /* add to queue */
-    } else if(r->max == HIGH_PRIORITY_QUANTUM) {
-        r->max = LOW_PRIORITY_QUANTUM;
+    } else if(r->bytes_max_allowed == HIGH_PRIORITY_QUANTUM) {
+        r->bytes_max_allowed = LOW_PRIORITY_QUANTUM;
         queue_enqueue(&ready[1], r);
     } else {
         queue_enqueue(&ready[2], r);

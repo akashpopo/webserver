@@ -1,22 +1,16 @@
-/*
- * File: rcb.h
- * Author: Alex Brodsky
- * Purpose: Defines the Request Control Block for managing requests.
- */
-
-#ifndef RCB_H
-#define RCB_H
+#ifndef REQUEST_CONTROL_BLOCK
+#define REQUEST_CONTROL_BLOCK
 
 #include <stdio.h>
 
 struct rcb {
-    struct rcb* next;   /* pointer to next rcb in queue */
-    int seq;     /* sequence # of request */
-    int client;  /* client file descriptor */
-    FILE* file;  /* FILE stream of requested file */
-    int left;    /* number of bytes left to send */
-    int max;     /* maximum allowed send */
-    int last;    /* last amount of bytes sent */
+    int sequence_number;         /* sequence # of request */
+    int client_file_descriptor;  /* client file descriptor */
+    int bytes_remaining;         /* number of bytes left to send */
+    int bytes_max_allowed;       /* maximum allowed send */
+    FILE* file;                  /* FILE handle of the requested file */
+    int bytes_last_sent;         /* last amount of bytes sent */
+    struct rcb* next_rcb;        /* pointer to next rcb in queue */
 };
 
 #endif

@@ -14,7 +14,7 @@
 #define FALSE 0
 
 /* global variables */
-static struct rcb request_table[MAX_REQUESTS];      /* request table */
+static struct rcb request_table[MAX_REQUESTS];
 static struct rcb* free_rcb;
 static int request_counter = 1;
 
@@ -24,140 +24,167 @@ static int request_counter = 1;
  * request is improper or the file is not available, the appropriate
  * error is sent back.
  */
-static struct rcb* serve_client(int fd) {
-    static char *buffer;                              /* request buffer */
-    struct stat st;                                   /* struct for file size */
-    char *req = NULL;                                 /* ptr to req file */
-    char *brk;                                        /* state used by strtok */
-    char *tmp;                                        /* error checking ptr */
-    FILE *fin;                                        /* input file handle */
-    int len = 0;                                      /* length of data read */
-    int left = MAX_HTTP_SIZE;                         /* amount of buffer left */
-    struct rcb* r;                                    /* new rcb */
+static struct rcb* serve_client(int file_descriptor) {
+    static char *buffer;
+    struct stat st;  //struct for file size
+    char *request_file_ptr = NULL;
+    char *strtok_result;
+    char *temp_bytes;
+    FILE *input_file;
+    int num_bytes_to_read = 0;
+    int buffer_left = MAX_HTTP_SIZE;
+    struct rcb* request_block;
 
-    if(!buffer) {                                     /* 1st time, alloc buffer */
+    //allocate the request buffer if it has not yet been allocated:
+    if(!buffer) {
         buffer = malloc(MAX_HTTP_SIZE);
-        if(!buffer) {                                 /* error check */
+        if(!buffer) {
             perror( "Error while allocating memory" );
             abort();
         }
     }
 
     memset(buffer, 0, MAX_HTTP_SIZE);
-    for(tmp = buffer; !strchr(tmp, '\n'); left -= len) { /* read req line */
-        tmp += len;
-        len = read(fd, tmp, left);                       /* read req from client */
-        if(len <= 0) {                                   /* if read incomplete */
-            perror("Error while reading request");       /* no need to go on */
-            close(fd);
+
+    //read the request line:
+    for(temp_bytes = buffer; !strchr(temp_bytes, '\n'); buffer_left -= num_bytes_to_read) {
+        temp_bytes += num_bytes_to_read;
+        //read client request:
+        num_bytes_to_read = read(file_descriptor, temp_bytes, buffer_left);
+
+        //check if the read is complete:
+        if(num_bytes_to_read <= 0) {
+            perror("Error while reading request");
+            close(file_descriptor);
             return NULL;
         }
     }
 
-    /* standard requests are of the form
-    *   GET /foo/bar/qux.html HTTP/1.1
-    * We want the second token (the file path).
-    */
-    tmp = strtok_r(buffer, " ", &brk);                   /* parse request */
-    if(tmp && !strcmp("GET", tmp)) {
-        req = strtok_r(NULL, " ", &brk);
+    //get the file path (2nd token of the format: GET /foo/bar/qux.html HTTP/1.1)
+    temp_bytes = strtok_r(buffer, " ", &strtok_result);
+
+    //parse the request:
+    if(temp_bytes && !strcmp("GET", temp_bytes)) {
+        request_file_ptr = strtok_r(NULL, " ", &strtok_result);
     }
 
-    if(!req) {                                           /* is req valid? */
-        len = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
-        write(fd, buffer, len);                          /* if not, send err */
-    } else {                                             /* if so, open file */
-        req++;                                           /* skip leading / */
-        fin = fopen(req, "r");                           /* open file */
-        if(!fin) {                                       /* check if successful */
-            len = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
-            write(fd, buffer, len);                      /* if not, send err */
-        } else if(!fstat( fileno( fin ), &st)) {         /* if so, start request */
-            len = sprintf(buffer, "HTTP/1.1 200 OK\n\n");/* send success code */
-            write(fd, buffer, len);
+    //check if the request is valid:
+    if(!request_file_ptr) {
+        //invalid request. Write the error:
+        num_bytes_to_read = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
+        write(file_descriptor, buffer, num_bytes_to_read);
+    } else {
+        //request is valid. Open the file:
+        request_file_ptr++;   //skip leading /
+        input_file = fopen(request_file_ptr, "r");
 
-            r = free_rcb;                                 /* allocate RCB */
+        //check if the file was opened:
+        if (!input_file) {
+            //file was not opened. Write the error:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+        } else if (!fstat(fileno(input_file), &st)) {
+            //file was opened. Send the success code and start the request:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+
+            //allocate the RCB:
+            request_block = free_rcb;
             free_rcb = free_rcb->next_rcb;
-            memset(r, 0, sizeof(struct rcb));
+            memset(request_block, 0, sizeof(struct rcb));
 
-            r->sequence_number = request_counter++;       /* init RCB */
-            r->client_file_descriptor = fd;
-            r->file = fin;
-            r->bytes_remaining = st.st_size;
-            return r;                                     /* return rcb */
+            //initialize RCB values and return it:
+            request_block->sequence_number = request_counter++;
+            request_block->client_file_descriptor = file_descriptor;
+            request_block->file = input_file;
+            request_block->bytes_remaining = st.st_size;
+
+            return request_block;
         }
-        fclose(fin);
+        fclose(input_file);
     }
-    close(fd);       /* close client connection */
-    return NULL;     /* not a valid request */
+    //invalid request. Close the client connection:
+    close(file_descriptor);
+    return NULL;
 }
 
 
-/* This function takes a file handle to a client, reads in the request,
- *    parses the request, and sends back the requested file.  If the
- *    request is improper or the file is not available, the appropriate
- *    error is sent back.
- * Parameters:
- *             fd : the file descriptor to the client connection
- * Returns: None
+/*
+ * Determine if the request is finished yet.
  */
-static int serve(struct rcb* req) {
-    static char* buffer;                              /* request buffer */
-    int len;                                          /* length of data read */
-    int n;                                            /* amount to send */
+static int serve(struct rcb* request_block) {
+    static char* buffer;
+    int num_bytes_to_read;
+    int num_bytes_to_send;
 
-    if (!buffer) {                                    /* 1st time, alloc buffer */
+    //allocate the request buffer if it has not yet been allocated:
+    if (!buffer) {
         buffer = malloc(MAX_HTTP_SIZE);
-        if (!buffer) {                                /* error check */
+        if (!buffer) {
             perror("Error while allocating memory");
             abort();
         }
     }
 
-    n = req->bytes_remaining;                                     /* compute send amount */
-    if (!n) {                                          /* if 0, we're done */
-        return 0;
-    } else if (req->bytes_max_allowed && (req->bytes_max_allowed < n)) {           /* if there is limit */
-        n = req->bytes_max_allowed;                                  /* send upto the limit */
-    }
-    req->bytes_last_sent = n;                                     /* remember send size */
+    //get the # of bytes to send:
+    num_bytes_to_send = request_block->bytes_remaining;
 
-    do {                                               /* loop, read & send file */
-        len = n < MAX_HTTP_SIZE ? n : MAX_HTTP_SIZE;   /* how much to read */
-        len = fread(buffer, 1, len, req->file);        /* read file chunk */
-        if(len < 1) {                                  /* check for errors */
+    //check how much to send and if there is a size cap:
+    if (!num_bytes_to_send) {
+        //request is finished.
+        return 0;
+    } else if (request_block->bytes_max_allowed && (request_block->bytes_max_allowed < num_bytes_to_send)) {
+        //there is a size cap. Set the size cap:
+        num_bytes_to_send = request_block->bytes_max_allowed;
+    }
+
+    //store the amount of data we are sending:
+    request_block->bytes_last_sent = num_bytes_to_send;
+
+    //read and send the file while there's still bytes to send:
+    do {
+        if (num_bytes_to_send < MAX_HTTP_SIZE) {
+            num_bytes_to_read = num_bytes_to_send;
+        } else {
+            //cap read amount to the max size:
+            num_bytes_to_read = MAX_HTTP_SIZE;
+        }
+        //read the file:
+        num_bytes_to_read = fread(buffer, 1, num_bytes_to_read, request_block->file);
+
+        //prepare to write to the client:
+        if(num_bytes_to_read < 1) {
             perror("Error while reading file");
             return 0;
-        } else if (len > 0) {                          /* if none, send chunk */
-            len = write(req->client_file_descriptor, buffer, len);
-            if (len < 1) {                             /* check for errors */
+        } else if (num_bytes_to_read > 0) {
+            //write to the client:
+            num_bytes_to_read = write(request_block->client_file_descriptor, buffer, num_bytes_to_read);
+            if (num_bytes_to_read < 1) {
                 perror("Error while writing to client");
                 return 0;
             }
-            req->bytes_remaining -= len;                          /* reduce what remains */
-            n -= len;
-        }
-    } while((n > 0) && (len == MAX_HTTP_SIZE));        /* the last chunk < 8192 */
 
-    return req->bytes_remaining > 0;                              /* return true if not done */
+            //set remaining bytes to send:
+            request_block->bytes_remaining -= num_bytes_to_read;
+            num_bytes_to_send -= num_bytes_to_read;
+        }
+    } while((num_bytes_to_send > 0) && (num_bytes_to_read == MAX_HTTP_SIZE));
+
+    //return true if there are still bytes remaining to be sent, and false otherwise.
+    return request_block->bytes_remaining > 0;
 }
 
 
 /* This function is where the program starts running.
- *    The function first parses its command line parameters to determine port #
- *    Then, it initializes, the network and enters the main loop.
- *    The main loop waits for a client (1 or more to connect, and then processes
- *    all clients by calling the seve_client() function for each one.
- * Parameters:
- *             argc : number of command line parameters (including program name
- *             argv : array of pointers to command line parameters
- * Returns: an integer status code, 0 for success, something else for error.
+ * The function first parses its command line parameters to determine port #
+ * Then, it initializes, the network and enters the main loop.
+ * The main loop waits for a client (1 or more to connect, and then processes all clients.
  */
-int main( int argc, char **argv ) {
-    int port = -1;                                   /* server port # */
-    int fd;                                          /* client file descriptor */
+int main(int argc, char **argv) {
+    int port = -1;
+    int fd;
     int numThreads;
-    struct rcb* request;                             /* next request to process */
+    struct rcb* request;
 
     /* check for and process input parameters: */
     if((argc <= 3) || (sscanf(argv[1], "%d", &port) < 1)
@@ -172,14 +199,14 @@ int main( int argc, char **argv ) {
     network_init(port);
 
     free_rcb = request_table;
-    for (int i = 0; i < MAX_REQUESTS-1; i++) {
+    for (int i = 0; i < MAX_REQUESTS-1; i++) { //init the request table
         request_table[i].next_rcb = &request_table[i+1];
     }
 
-    /* infinite loop */
     while (TRUE) {
         network_wait(); //wait for clients
         do {
+            //grab all file descriptors, get its RCB, and submit it to the scheduler:
             for (fd = network_open(); fd >= 0; fd = network_open()) {
                 request = serve_client(fd);
                 if (request) {
@@ -187,9 +214,14 @@ int main( int argc, char **argv ) {
                 }
             }
             request = get_from_scheduler();
+
+            //check if the request has finished
             if (request && serve(request)) {
+                //request is not finished yet. Re-submit it to the scheduler.
                 submit_to_scheduler(request);
-            } else if (request) {
+            }
+            else if (request) {
+                //request is finished. Close the file and complete the request.
                 request->next_rcb = free_rcb;
                 free_rcb = request;
                 fclose(request->file);

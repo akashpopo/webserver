@@ -92,11 +92,6 @@ static struct rcb* serve_client(struct rcb* request_block) {
             num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
             write(file_descriptor, buffer, num_bytes_to_read);
 
-            // //allocate the RCB:
-            // request_block = free_rcb;
-            // free_rcb = free_rcb->next_rcb;
-            // memset(request_block, 0, sizeof(struct rcb));
-
             //initialize RCB values and return it:
             request_block->sequence_number = request_counter++;
             request_block->client_file_descriptor = file_descriptor;

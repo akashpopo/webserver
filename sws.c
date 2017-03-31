@@ -20,7 +20,6 @@ static struct rcb request_table[MAX_REQUESTS];
 static struct rcb* free_rcb;
 static struct scheduler_queue work_queue;
 static int request_counter = 1;
-pthread_mutex_t inc_seq_num = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 
@@ -30,16 +29,16 @@ pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
  * request is improper or the file is not available, the appropriate
  * error is sent back.
  */
-static struct rcb* serve_client(int file_descriptor) {
-    static char *buffer;
+static struct rcb* serve_client(struct rcb* request_block) {
+    static char* buffer;
     struct stat st;  //struct for file size
-    char *request_file_ptr = NULL;
-    char *strtok_result;
-    char *temp_bytes;
-    FILE *input_file;
+    char* request_file_ptr = NULL;
+    char* strtok_result;
+    char* temp_bytes;
+    FILE* input_file;
     int num_bytes_to_read = 0;
     int buffer_left = MAX_HTTP_SIZE;
-    struct rcb* request_block;
+    int file_descriptor = request_block->client_file_descriptor;
 
     //allocate the request buffer if it has not yet been allocated:
     if (!buffer) {
@@ -61,7 +60,6 @@ static struct rcb* serve_client(int file_descriptor) {
         //check if the read is complete:
         if(num_bytes_to_read <= 0) {
             perror("Error while reading request");
-            close(file_descriptor);
             return NULL;
         }
     }
@@ -90,19 +88,17 @@ static struct rcb* serve_client(int file_descriptor) {
             num_bytes_to_read = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
             write(file_descriptor, buffer, num_bytes_to_read);
         } else if (!fstat(fileno(input_file), &st)) {
-            //file was opened. Send the success code and start the request:
+            //file was opened. Send the success message and start the request:
             num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
             write(file_descriptor, buffer, num_bytes_to_read);
 
-            //allocate the RCB:
-            request_block = free_rcb;
-            free_rcb = free_rcb->next_rcb;
-            memset(request_block, 0, sizeof(struct rcb));
+            // //allocate the RCB:
+            // request_block = free_rcb;
+            // free_rcb = free_rcb->next_rcb;
+            // memset(request_block, 0, sizeof(struct rcb));
 
             //initialize RCB values and return it:
-            pthread_mutex_lock(&inc_seq_num);
             request_block->sequence_number = request_counter++;
-            pthread_mutex_unlock(&inc_seq_num);
             request_block->client_file_descriptor = file_descriptor;
             request_block->file = input_file;
             request_block->bytes_remaining = st.st_size;
@@ -195,7 +191,7 @@ static void *thread_execution_function(void* arg) {
         //dequeue from the work queue and grab the RCB:
         request_block = scheduler_dequeue(&work_queue, block);
         if (request_block) {
-            if (serve_client(request_block->client_file_descriptor)) {
+            if (serve_client(request_block)) {
                 submit_to_scheduler(request_block);
             } else {
                 close(request_block->client_file_descriptor);

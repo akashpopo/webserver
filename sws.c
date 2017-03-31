@@ -4,6 +4,7 @@
 #include <unistd.h>    //provides access to the POSIX API
 #include <sys/stat.h>  //needed to gather info about file attributes
 #include <pthread.h>   //multithreading library
+#include <stdarg.h>
 
 #include "network.h"
 #include "scheduler.h"
@@ -22,6 +23,18 @@ static struct scheduler_queue work_queue;
 static int request_counter = 1;
 pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
+
+void thread_print_function( char * input_string, ... ) {
+  static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
+
+  va_list parameter_list;
+  va_start(parameter_list, input_string);
+
+  pthread_mutex_lock( &thread_print_lock );
+  vprintf(input_string, parameter_list);
+  fflush(stdout);
+  pthread_mutex_unlock(&thread_print_lock);
+}
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -78,7 +91,12 @@ static struct rcb* serve_client(struct rcb* request_block) {
         num_bytes_to_read = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
         write(file_descriptor, buffer, num_bytes_to_read);
     } else {
-        //request is valid. Open the file:
+        //request is valid.
+
+        // get file path for later use
+        strncpy(request_block->file_path, request_file_ptr, FILENAME_MAX);
+
+        //Open the file:
         request_file_ptr++;   //skip leading /
         input_file = fopen(request_file_ptr, "r");
 
@@ -192,7 +210,11 @@ static void *thread_execution_function(void* arg) {
         request_block = scheduler_dequeue(&work_queue, block);
         if (request_block) {
             if (serve_client(request_block)) {
+
+                thread_print_function("Request for file %s admitted.\n", request_block->file_path );
+
                 submit_to_scheduler(request_block);
+
             } else {
                 close(request_block->client_file_descriptor);
 
@@ -213,12 +235,19 @@ static void *thread_execution_function(void* arg) {
             request_block = get_from_scheduler();
             if (request_block && serve(request_block)) {
                 //request is not finished yet. Re-submit it to the scheduler.
+
+                thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
+
                 submit_to_scheduler(request_block);
             } else if (request_block) {
                 //request is finished. Close the file and complete the request.
-                printf("Request %d completed.\n", request_block->sequence_number);
+
+                thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
+
                 fclose(request_block->file);
                 close(request_block->client_file_descriptor);
+
+                thread_print_function( "Request for file %s completed.\n", request_block->file_path );
                 fflush(stdout);
 
                 //we are enterting a critical section. Lock the state:

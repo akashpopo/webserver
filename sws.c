@@ -1,11 +1,13 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <stdio.h>     //provides I/O functions
+#include <stdlib.h>    //provides general C functions
+#include <string.h>    //provides functions for char[] manipulation
+#include <unistd.h>    //provides access to the POSIX API
+#include <sys/stat.h>  //needed to gather info about file attributes
+#include <pthread.h>   //multithreading library
 
 #include "network.h"
 #include "scheduler.h"
+#include "scheduler_queue.h"
 
 /* constants */
 #define MAX_HTTP_SIZE 8192
@@ -16,7 +18,11 @@
 /* global variables */
 static struct rcb request_table[MAX_REQUESTS];
 static struct rcb* free_rcb;
+static struct scheduler_queue work_queue;
 static int request_counter = 1;
+pthread_mutex_t inc_seq_num = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 
 
 /* This function takes a file handle to a client, reads in the request,
@@ -36,10 +42,10 @@ static struct rcb* serve_client(int file_descriptor) {
     struct rcb* request_block;
 
     //allocate the request buffer if it has not yet been allocated:
-    if(!buffer) {
+    if (!buffer) {
         buffer = malloc(MAX_HTTP_SIZE);
-        if(!buffer) {
-            perror( "Error while allocating memory" );
+        if (!buffer) {
+            perror("Error while allocating memory");
             abort();
         }
     }
@@ -94,7 +100,9 @@ static struct rcb* serve_client(int file_descriptor) {
             memset(request_block, 0, sizeof(struct rcb));
 
             //initialize RCB values and return it:
+            pthread_mutex_lock(&inc_seq_num);
             request_block->sequence_number = request_counter++;
+            pthread_mutex_unlock(&inc_seq_num);
             request_block->client_file_descriptor = file_descriptor;
             request_block->file = input_file;
             request_block->bytes_remaining = st.st_size;
@@ -175,60 +183,132 @@ static int serve(struct rcb* request_block) {
 }
 
 
-/* This function is where the program starts running.
- * The function first parses its command line parameters to determine port #
- * Then, it initializes, the network and enters the main loop.
- * The main loop waits for a client (1 or more to connect, and then processes all clients.
+/*
+ * Each thread executes this function.
  */
-int main(int argc, char **argv) {
+static void *thread_execution_function(void* arg) {
+    struct rcb* request_block;
+    int block = 0;
+
+    //enter infinite loop:
+    while (TRUE) {
+        //dequeue from the work queue and grab the RCB:
+        request_block = scheduler_dequeue(&work_queue, block);
+        if (request_block) {
+            if (serve_client(request_block->client_file_descriptor)) {
+                submit_to_scheduler(request_block);
+            } else {
+                close(request_block->client_file_descriptor);
+
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //free the RCB:
+                request_block->next_rcb = free_rcb;
+                free_rcb = request_block;
+
+                //emit a signal that the RCB is now available
+                pthread_cond_signal(&rcb_available);
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+            }
+        } else {
+            request_block = get_from_scheduler();
+            if (request_block && serve(request_block)) {
+                //request is not finished yet. Re-submit it to the scheduler.
+                submit_to_scheduler(request_block);
+            } else if (request_block) {
+                //request is finished. Close the file and complete the request.
+                printf("Request %d completed.\n", request_block->sequence_number);
+                fclose(request_block->file);
+                close(request_block->client_file_descriptor);
+                fflush(stdout);
+
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //free the RCB:
+                request_block->next_rcb = free_rcb;
+                free_rcb = request_block;
+
+                //emit a signal that the RCB is now available
+                pthread_cond_signal(&rcb_available);
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+            }
+        }
+        block = request_block == NULL;
+    }
+    return NULL;
+}
+
+
+/* This function is where the program starts running.
+ * The function first parses its command line parameters to determine port #.
+ * Then it initializes the network and enters the main loop.
+ * The main loop waits for a client (1 or more) to connect, and then processes all clients.
+ */
+int main(int argc, char** argv) {
     int port = -1;
     int fd;
-    int numThreads;
+    int num_threads;
     struct rcb* request;
+    pthread_t thread_id;
 
-    /* check for and process input parameters: */
+    // check for and process input parameters:
     if((argc <= 3) || (sscanf(argv[1], "%d", &port) < 1)
-                   || (sscanf(argv[3], "%d", &numThreads) < 1)) {
+                   || (sscanf(argv[3], "%d", &num_threads) < 1)) {
         printf("usage: sws <port> <schedulerAlgorithm> <numThreads>\n");
         printf("For example: ./sws 8080 SJF 100\n");
         return 0;
     }
 
-    /* init all components */
-    scheduler_init(argv[2]);   //argv[2] is the char* scheduler algorithm
-    network_init(port);
+    // initialize all components:
+    scheduler_init(argv[2]);   //init the scheduler with the user-inputted algorithm
+    network_init(port);        //init network with the given port
+    queue_init(&work_queue);   //init the work queue
 
+    // initialize request table:
     free_rcb = request_table;
-    for (int i = 0; i < MAX_REQUESTS-1; i++) { //init the request table
+    for (int i = 0; i < MAX_REQUESTS-1; i++) {
         request_table[i].next_rcb = &request_table[i+1];
     }
 
-    while (TRUE) {
-        network_wait(); //wait for clients
-        do {
-            //grab all file descriptors, get its RCB, and submit it to the scheduler:
-            for (fd = network_open(); fd >= 0; fd = network_open()) {
-                request = serve_client(fd);
-                if (request) {
-                    submit_to_scheduler(request);
-                }
-            }
-            request = get_from_scheduler();
+    // initialize all threads:
+    for (int j = 0; j < num_threads; j++) {
+        pthread_create(&thread_id, NULL, &thread_execution_function, NULL);
+    }
 
-            //check if the request has finished
-            if (request && serve(request)) {
-                //request is not finished yet. Re-submit it to the scheduler.
-                submit_to_scheduler(request);
+    // enter infinite loop:
+    while (TRUE) {
+        //wait for clients:
+        network_wait();
+
+        //grab all file descriptors, get its RCB, and submit it to the scheduler:
+        for (fd = network_open(); fd >= 0; fd = network_open()) {
+            //we are enterting a critical section. Lock the state:
+            pthread_mutex_lock(&alloc_rcb_lock);
+
+            //check if the RCB is free'd up:
+            if (!free_rcb) {
+                //wait for the availability signal:
+                pthread_cond_wait(&rcb_available, &alloc_rcb_lock);
             }
-            else if (request) {
-                //request is finished. Close the file and complete the request.
-                request->next_rcb = free_rcb;
-                free_rcb = request;
-                fclose(request->file);
-                close(request->client_file_descriptor);
-                printf("Request %d completed.\n", request->sequence_number);
-                fflush(stdout);
-            }
-        } while(request);
+
+            //allocate RCB:
+            request = free_rcb;
+            free_rcb = free_rcb->next_rcb;
+
+            //we are leaving a critical section. Unlock the state:
+            pthread_mutex_unlock(&alloc_rcb_lock);
+
+            memset(request, 0, sizeof(struct rcb));
+
+            //set fd and put it onto the queue:
+            request->client_file_descriptor = fd;
+            scheduler_enqueue(&work_queue, request);
+        }
     }
 }

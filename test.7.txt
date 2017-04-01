@@ -1,0 +1,13 @@
+//	Test Case 7 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test:
+
+
+How it works:
+
+
+Expected Results:
+	An output file with the format	->	test.7.$.out
+	Where '$' represents the chosen scheduler.

@@ -317,29 +317,32 @@ int main(int argc, char** argv) {
         //wait for clients:
         network_wait();
 
-        //grab all file descriptors, get its RCB, and submit it to the scheduler:
-        for (fd = network_open(); fd >= 0; fd = network_open()) {
-            //we are enterting a critical section. Lock the state:
-            pthread_mutex_lock(&alloc_rcb_lock);
+        //process requests while number of requests is less than 100
+        while (request_counter < MAX_REQUESTS) {
+            //grab all file descriptors, get its RCB, and submit it to the scheduler:
+            for (fd = network_open(); fd >= 0; fd = network_open()) {
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
 
-            //check if the RCB is free'd up:
-            if (!free_rcb) {
-                //wait for the availability signal:
-                pthread_cond_wait(&rcb_available, &alloc_rcb_lock);
+                //check if the RCB is free'd up:
+                if (!free_rcb) {
+                    //wait for the availability signal:
+                    pthread_cond_wait(&rcb_available, &alloc_rcb_lock);
+                }
+
+                //allocate RCB:
+                request = free_rcb;
+                free_rcb = free_rcb->next_rcb;
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+
+                memset(request, 0, sizeof(struct rcb));
+
+                //set fd and put it onto the queue:
+                request->client_file_descriptor = fd;
+                scheduler_enqueue(&work_queue, request);
             }
-
-            //allocate RCB:
-            request = free_rcb;
-            free_rcb = free_rcb->next_rcb;
-
-            //we are leaving a critical section. Unlock the state:
-            pthread_mutex_unlock(&alloc_rcb_lock);
-
-            memset(request, 0, sizeof(struct rcb));
-
-            //set fd and put it onto the queue:
-            request->client_file_descriptor = fd;
-            scheduler_enqueue(&work_queue, request);
         }
     }
 }

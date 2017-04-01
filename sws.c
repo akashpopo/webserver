@@ -4,7 +4,7 @@
 #include <unistd.h>    //provides access to the POSIX API
 #include <sys/stat.h>  //needed to gather info about file attributes
 #include <pthread.h>   //multithreading library
-#include <stdarg.h>
+#include <stdarg.h>    //unknown function arguments library
 
 #include "network.h"
 #include "scheduler.h"
@@ -24,7 +24,9 @@ static int request_counter = 1;
 pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 
-/* Function to safely print processing messages with multithreading.*/
+/*
+ * Function to safely print processing messages with multithreading.
+ */
 void thread_print_function( char * input_string, ... ) {
     static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
 

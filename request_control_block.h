@@ -10,6 +10,7 @@ struct rcb {
     int bytes_remaining;         /* number of bytes left to send */
     int bytes_max_allowed;       /* maximum allowed send */
     FILE* file;                  /* FILE handle of the requested file */
+    char file_path[FILENAME_MAX];          /* path of fileine */
     int bytes_last_sent;         /* last amount of bytes sent */
     struct rcb* next_rcb;        /* pointer to next rcb in queue */
 };

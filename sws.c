@@ -24,16 +24,19 @@ static int request_counter = 1;
 pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 
+/* Function to safely print processing messages with multithreading.*/
 void thread_print_function( char * input_string, ... ) {
-  static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
+    static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
 
-  va_list parameter_list;
-  va_start(parameter_list, input_string);
+    //get and format parameter arguments for printing
+    va_list parameter_list;
+    va_start(parameter_list, input_string);
 
-  pthread_mutex_lock( &thread_print_lock );
-  vprintf(input_string, parameter_list);
-  fflush(stdout);
-  pthread_mutex_unlock(&thread_print_lock);
+    //lock, print, flush, unlock
+    pthread_mutex_lock( &thread_print_lock );
+    vprintf(input_string, parameter_list);
+    fflush(stdout);
+    pthread_mutex_unlock(&thread_print_lock);
 }
 
 
@@ -211,8 +214,8 @@ static void *thread_execution_function(void* arg) {
         if (request_block) {
             if (serve_client(request_block)) {
 
+                //print file admitted message and submit to scheduler
                 thread_print_function("Request for file %s admitted.\n", request_block->file_path );
-
                 submit_to_scheduler(request_block);
 
             } else {
@@ -234,19 +237,20 @@ static void *thread_execution_function(void* arg) {
         } else {
             request_block = get_from_scheduler();
             if (request_block && serve(request_block)) {
-                //request is not finished yet. Re-submit it to the scheduler.
-
+                //request is not finished yet.
+                //Print sent bytes message and re-submit RCB to the scheduler.
                 thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
-
                 submit_to_scheduler(request_block);
             } else if (request_block) {
                 //request is finished. Close the file and complete the request.
 
+                //print sent bytes message
                 thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
 
                 fclose(request_block->file);
                 close(request_block->client_file_descriptor);
 
+                //print file complete message
                 thread_print_function( "Request for file %s completed.\n", request_block->file_path );
                 fflush(stdout);
 

@@ -1,1 +1,11 @@
-Solely testing the delays function, every request comes in at the same time.
+//	Test Case 1 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test: Solely testing the delays function, every request comes in at
+                 the same time.
+
+How it works: Takes each request at the same time and then the connections are
+              delayed by different amounts of times.
+
+Expected Results: 7, 1, 9, 3, 2, 4, 10, 5, 6, 11, 8

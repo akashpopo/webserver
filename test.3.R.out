@@ -1,0 +1,1124 @@
+Thread 1 ============================================
+HTTP/1.1 200 OK
+
+#include <stdio.h>     //provides I/O functions
+#include <stdlib.h>    //provides general C functions
+#include <string.h>    //provides functions for char[] manipulation
+#include <unistd.h>    //provides access to the POSIX API
+#include <sys/stat.h>  //needed to gather info about file attributes
+#include <pthread.h>   //multithreading library
+#include <stdarg.h>    //unknown function arguments library
+
+#include "network.h"
+#include "scheduler.h"
+#include "scheduler_queue.h"
+
+/* constants */
+#define MAX_HTTP_SIZE 8192
+#define MAX_REQUESTS 100
+#define TRUE 1
+#define FALSE 0
+
+/* global variables */
+static struct rcb request_table[MAX_REQUESTS];
+static struct rcb* free_rcb;
+static struct scheduler_queue work_queue;
+static int request_counter = 1;
+pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
+
+/*
+ * Function to safely print processing messages with multithreading.
+ */
+void thread_print_function( char * input_string, ... ) {
+    static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
+
+    //get and format parameter arguments for printing
+    va_list parameter_list;
+    va_start(parameter_list, input_string);
+
+    //lock, print, flush, unlock
+    pthread_mutex_lock( &thread_print_lock );
+    vprintf(input_string, parameter_list);
+    fflush(stdout);
+    pthread_mutex_unlock(&thread_print_lock);
+}
+
+
+/* This function takes a file handle to a client, reads in the request,
+ * parses the request, and sends back the requested file.  If the
+ * request is improper or the file is not available, the appropriate
+ * error is sent back.
+ */
+static struct rcb* serve_client(struct rcb* request_block) {
+    static char* buffer;
+    struct stat st;  //struct for file size
+    char* request_file_ptr = NULL;
+    char* strtok_result;
+    char* temp_bytes;
+    FILE* input_file;
+    int num_bytes_to_read = 0;
+    int buffer_left = MAX_HTTP_SIZE;
+    int file_descriptor = request_block->client_file_descriptor;
+
+    //allocate the request buffer if it has not yet been allocated:
+    if (!buffer) {
+        buffer = malloc(MAX_HTTP_SIZE);
+        if (!buffer) {
+            perror("Error while allocating memory");
+            abort();
+        }
+    }
+
+    memset(buffer, 0, MAX_HTTP_SIZE);
+
+    //read the request line:
+    for(temp_bytes = buffer; !strchr(temp_bytes, '\n'); buffer_left -= num_bytes_to_read) {
+        temp_bytes += num_bytes_to_read;
+        //read client request:
+        num_bytes_to_read = read(file_descriptor, temp_bytes, buffer_left);
+
+        //check if the read is complete:
+        if(num_bytes_to_read <= 0) {
+            perror("Error while reading request");
+            return NULL;
+        }
+    }
+
+    //get the file path (2nd token of the format: GET /foo/bar/qux.html HTTP/1.1)
+    temp_bytes = strtok_r(buffer, " ", &strtok_result);
+
+    //parse the request:
+    if(temp_bytes && !strcmp("GET", temp_bytes)) {
+        request_file_ptr = strtok_r(NULL, " ", &strtok_result);
+    }
+
+    //check if the request is valid:
+    if(!request_file_ptr) {
+        //invalid request. Write the error:
+        num_bytes_to_read = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
+        write(file_descriptor, buffer, num_bytes_to_read);
+    } else {
+        //request is valid.
+
+        // get file path for later use
+        strncpy(request_block->file_path, request_file_ptr, FILENAME_MAX);
+
+        //Open the file:
+        request_file_ptr++;   //skip leading /
+        input_file = fopen(request_file_ptr, "r");
+
+        //check if the file was opened:
+        if (!input_file) {
+            //file was not opened. Write the error:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+        } else if (!fstat(fileno(input_file), &st)) {
+            //file was opened. Send the success message and start the request:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+
+            // //allocate the RCB:
+            // request_block = free_rcb;
+            // free_rcb = free_rcb->next_rcb;
+            // memset(request_block, 0, sizeof(struct rcb));
+
+            //initialize RCB values and return it:
+            request_block->sequence_number = request_counter++;
+            request_block->client_file_descriptor = file_descriptor;
+            request_block->file = input_file;
+            request_block->bytes_remaining = st.st_size;
+
+            return request_block;
+        }
+        fclose(input_file);
+    }
+    //invalid request. Close the client connection:
+    close(file_descriptor);
+    return NULL;
+}
+
+
+/*
+ * Determine if the request is finished yet.
+ */
+static int serve(struct rcb* request_block) {
+    static char* buffer;
+    int num_bytes_to_read;
+    int num_bytes_to_send;
+
+    //allocate the request buffer if it has not yet been allocated:
+    if (!buffer) {
+        buffer = malloc(MAX_HTTP_SIZE);
+        if (!buffer) {
+            perror("Error while allocating memory");
+            abort();
+        }
+    }
+
+    //get the # of bytes to send:
+    num_bytes_to_send = request_block->bytes_remaining;
+
+    //check how much to send and if there is a size cap:
+    if (!num_bytes_to_send) {
+        //request is finished.
+        return 0;
+    } else if (request_block->bytes_max_allowed && (request_block->bytes_max_allowed < num_bytes_to_send)) {
+        //there is a size cap. Set the size cap:
+        num_bytes_to_send = request_block->bytes_max_allowed;
+    }
+
+    //store the amount of data we are sending:
+    request_block->bytes_last_sent = num_bytes_to_send;
+
+    //read and send the file while there's still bytes to send:
+    do {
+        if (num_bytes_to_send < MAX_HTTP_SIZE) {
+            num_bytes_to_read = num_bytes_to_send;
+        } else {
+            //cap read amount to the max size:
+            num_bytes_to_read = MAX_HTTP_SIZE;
+        }
+        //read the file:
+        num_bytes_to_read = fread(buffer, 1, num_bytes_to_read, request_block->file);
+
+        //prepare to write to the client:
+        if(num_bytes_to_read < 1) {
+            perror("Error while reading file");
+            return 0;
+        } else if (num_bytes_to_read > 0) {
+            //write to the client:
+            num_bytes_to_read = write(request_block->client_file_descriptor, buffer, num_bytes_to_read);
+            if (num_bytes_to_read < 1) {
+                perror("Error while writing to client");
+                return 0;
+            }
+
+            //set remaining bytes to send:
+            request_block->bytes_remaining -= num_bytes_to_read;
+            num_bytes_to_send -= num_bytes_to_read;
+        }
+    } while((num_bytes_to_send > 0) && (num_bytes_to_read == MAX_HTTP_SIZE));
+
+    //return true if there are still bytes remaining to be sent, and false otherwise.
+    return request_block->bytes_remaining > 0;
+}
+
+
+/*
+ * Each thread executes this function.
+ */
+static void *thread_execution_function(void* arg) {
+    struct rcb* request_block;
+    int block = 0;
+
+    //enter infinite loop:
+    while (TRUE) {
+        //dequeue from the work queue and grab the RCB:
+        request_block = scheduler_dequeue(&work_queue, block);
+        if (request_block) {
+            if (serve_client(request_block)) {
+
+                //print file admitted message and submit to scheduler
+                thread_print_function("Request for file %s admitted.\n", request_block->file_path );
+                submit_to_scheduler(request_block);
+
+            } else {
+                close(request_block->client_file_descriptor);
+
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //free the RCB:
+                request_block->next_rcb = free_rcb;
+                free_rcb = request_block;
+
+                //emit a signal that the RCB is now available
+                pthread_cond_signal(&rcb_available);
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+            }
+        } else {
+         /* 
+ * File: network.c
+ * Author: Alex Brodsky
+ * Purpose: This file contains the network module to accept web connections.
+ *          Please see network.h for documentation on how to use this module.
+ */
+
+
+#include <stddef.h>
+#include <math.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/select.h>
+#include <poll.h>
+
+#include "network.h"
+
+static int serv_sock = -1;
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function returns.
+ *    Otherwise, this function puts the program to sleep (blocks) until
+ *    a client connects.
+ * Parameters: None
+ * Returns: None
+ */
+extern void network_wait() {
+  int n;                                                /* result var */
+  fd_set sel;                                           /* descriptor bits */
+  fd_set err;
+  
+  if( serv_sock < 0 ) {                                 /* sanity check */
+    perror( "Error, network not initalized" );
+    abort();
+  }
+
+  FD_ZERO( &sel );                                      /* initialize bits */
+  FD_ZERO( &err );
+  FD_SET( serv_sock, &sel );
+  FD_SET( serv_sock, &err );
+
+  n = select( serv_sock + 1, &sel, NULL, &err, NULL );  /* wait for conn. */
+
+  if( ( n <= 0 ) || FD_ISSET( serv_sock, &err ) ) {     /* check for errors */
+    perror( "Error occurred while waiting" );
+    abort();
+  } 
+}
+
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function opens
+ *    a connection to the next client waiting to connect, and returns an
+ *    integer file descriptor for the connection.  If no clients are 
+ *    waiting, this function returns -1.
+ * Parameters: None
+ * Returns: A positive integer file decriptor to the next clients connection,
+ *          or -1 if no client is waiting.
+ */
+extern int network_open() {
+  struct sockaddr_in server;                            /* addr of client */
+  int len = sizeof( server );                           /* length of addr */
+  int n;                                                /* return var */
+  int sock = -1;                                        /* socket for client */
+  fd_set sel;                                           /* descriptor bits */
+  fd_set err;
+  struct timeval tv;                                    /* time to wait */
+  
+  if( serv_sock < 0 ) {                                 /* sanity check */
+    perror( "Error, network not initalized" );
+    abort();
+  }
+
+  FD_ZERO( &sel );                                      /* check for client */
+  FD_ZERO( &err );
+  FD_SET( serv_sock, &sel );
+  FD_SET( serv_sock, &err );
+  memset( &tv, 0, sizeof( tv ) );
+  n = select( serv_sock + 1, &sel, NULL, &err, &tv );
+
+  if( ( n < 0 ) || FD_ISSET( serv_sock, &err ) ) {      /* check for errors */
+    perror( "Error occurred on select()" );
+    abort();
+  } else if( ( n > 0 ) && FD_ISSET( serv_sock, &sel ) ) { /* client is waiting*/
+    /* get client connection */
+    sock = accept( serv_sock, (struct sockaddr *)&server, (socklen_t *)&len );
+
+    if( sock < 0 ) {                                    /* check for errors */
+      perror( "Error occurred on select()" );
+    }
+  }
+  return sock;                                          /* return client conn.*/
+}
+
+
+/* This function initializes the network module and creates a server socket
+ *   bound to a specified port.  This function will abort the program if an
+ *   error occurs.
+ * Parameters: 
+ *             port : the port on which the server should listen.  Should be
+ *                    between 1024 and 65525
+ * Returns: None
+ */
+extern void network_init( int port ) {
+  struct sockaddr_in self;                             /* socket address */
+  int yes = 1;                                         /* config variable */
+  
+  serv_sock = socket( PF_INET, SOCK_STREAM, 0 );       /* create socket */
+  if( serv_sock < 0 ) {
+    perror( "Error wh
+Thread 2 ============================================
+HTTP/1.1 200 OK
+
+/* 
+ * File: network.c
+ * Author: Alex Brodsky
+ * Purpose: This file contains the network module to accept web connections.
+ *          Please see network.h for documentation on how to use this module.
+ */
+
+
+#include <stddef.h>
+#include <math.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <errno.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/select.h>
+#include <poll.h>
+
+#include "network.h"
+
+static int serv_sock = -1;
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function returns.
+ *    Otherwise, this function puts the program to sleep (blocks) until
+ *    a client connects.
+ * Parameters: None
+ * Returns: None
+ */
+extern void network_wait() {
+  int n;                                                /* result var */
+  fd_set sel;                                           /* descriptor bits */
+  fd_set err;
+  
+  if( serv_sock < 0 ) {                                 /* sanity check */
+    perror( "Error, network not initalized" );
+    abort();
+  }
+
+  FD_ZERO( &sel );                                      /* initialize bits */
+  FD_ZERO( &err );
+  FD_SET( serv_sock, &sel );
+  FD_SET( serv_sock, &err );
+
+  n = select( serv_sock + 1, &sel, NULL, &err, NULL );  /* wait for conn. */
+
+  if( ( n <= 0 ) || FD_ISSET( serv_sock, &err ) ) {     /* check for errors */
+    perror( "Error occurred while waiting" );
+    abort();
+  } 
+}
+
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function opens
+ *    a connection to the next client waiting to connect, and returns an
+ *    integer file descriptor for the connection.  If no clients are 
+ *    waiting, this function returns -1.
+ * Parameters: None
+ * Returns: A positive integer file decriptor to the next clients connection,
+ *          or -1 if no client is waiting.
+ */
+extern int network_open() {
+  struct sockaddr_in server;                            /* addr of client */
+  int len = sizeof( server );                           /* length of addr */
+  int n;                                                /* return var */
+  int sock = -1;                                        /* socket for client */
+  fd_set sel;                                           /* descriptor bits */
+  fd_set err;
+  struct timeval tv;                                    /* time to wait */
+  
+  if( serv_sock < 0 ) {                                 /* sanity check */
+    perror( "Error, network not initalized" );
+    abort();
+  }
+
+  FD_ZERO( &sel );                                      /* check for client */
+  FD_ZERO( &err );
+  FD_SET( serv_sock, &sel );
+  FD_SET( serv_sock, &err );
+  memset( &tv, 0, sizeof( tv ) );
+  n = select( serv_sock + 1, &sel, NULL, &err, &tv );
+
+  if( ( n < 0 ) || FD_ISSET( serv_sock, &err ) ) {      /* check for errors */
+    perror( "Error occurred on select()" );
+    abort();
+  } else if( ( n > 0 ) && FD_ISSET( serv_sock, &sel ) ) { /* client is waiting*/
+    /* get client connection */
+    sock = accept( serv_sock, (struct sockaddr *)&server, (socklen_t *)&len );
+
+    if( sock < 0 ) {                                    /* check for errors */
+      perror( "Error occurred on select()" );
+    }
+  }
+  return sock;                                          /* return client conn.*/
+}
+
+
+/* This function initializes the network module and creates a server socket
+ *   bound to a specified port.  This function will abort the program if an
+ *   error occurs.
+ * Parameters: 
+ *             port : the port on which the server should listen.  Should be
+ *                    between 1024 and 65525
+ * Returns: None
+ */
+extern void network_init( int port ) {
+  struct sockaddr_in self;                             /* socket address */
+  int yes = 1;                                         /* config variable */
+  
+  serv_sock = socket( PF_INET, SOCK_STREAM, 0 );       /* create socket */
+  if( serv_sock < 0 ) {
+    perror( "Error while creating server socket" );
+    abort();
+  } 
+
+                                                       /* configure socket */
+  setsockopt( serv_sock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof( int ) );
+  setsockopt( serv_sock, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof( int ) );
+
+  self.sin_family = AF_INET;                           /* bind socket to port */
+  self.sin_addr.s_addr = htonl( INADDR_ANY );
+  self.sin_port = htons( port );
+  if( bind( serv_sock, (struct sockaddr *)&self, sizeof( self ) ) )  {
+    perror( "Error on bind()" );
+    abort();
+  }
+
+  if( listen( serv_sock, 64 ) ) {                      /* allow connections */
+    perror( "Error on listen()" );
+    abort();
+  }
+}
+
+
+
+
+
+
+Thread 3 ============================================
+HTTP/1.1 200 OK
+
+# Targets & general dependencies
+PROGRAM = sws
+HEADERS = network.h scheduler.h request_control_block.h scheduler_queue.h
+OBJS = network.o sws.o scheduler.o scheduler_queue.o
+ADD_OBJS =
+
+# compilers, linkers, utilities, and flags
+CC = gcc
+CFLAGS = -Wall -g
+COMPILE = $(CC) $(CFLAGS)
+LINK = $(CC) $(CFLAGS) -o $@
+
+# implicit rule to build .o from .c files
+%.o: %.c $(HEADERS)
+	$(COMPILE) -c -o $@ $<
+
+
+# explicit rules
+all: sws
+
+$(PROGRAM): $(OBJS) $(ADD_OBJS)
+	$(LINK) $(OBJS) $(ADD_OBJS)
+
+lib: sws_gold.o
+	 ar -r libxsws.a sws_gold.o
+
+clean:
+	rm -f *.o $(PROGRAM)
+
+zip:
+	rm -f sws.zip
+	zip sws.zip network.c network.h makefile
+
+Thread 4 ============================================
+HTTP/1.1 200 OK
+
+# Caching Multithreaded Scheduling Web Server
+As part of our Operating Systems course at Dalhousie University, we are developing a Caching Multithreaded Scheduling Web Server in C.
+
+## Table of Contents
+- Environment Setup
+- Compiling and Running the Server
+- Testing the Server
+- Contribution Workflow
+- Background
+- Project Goals
+
+## Environment Setup
+
+1. cd into your dev directory, e.g. `cd dev/os/project`
+2. clone this git repository: `git clone https://github.com/Mons1Oerjan/webserver.git`
+
+## Compiling and Running the Server
+Here is a description on how to compile and run the program:
+
+1. cd into your project directory, e.g. `cd dev/os/project/webserver`
+2. Compile all files using the makefile and the make command: `make`
+3. Run the server using this format: `./sws <portnumber> <scheduling_algorithm> <number_of_threads> <cache_size>`, e.g: 
+```
+./sws 6789 SJF 100 104567
+``` 
+or:
+```
+./sws 12345 RR 67 456354
+```
+Note: The current state of the server requires us to fill in the scheduler algorithm, number of threads, and the cache size event though the features have not been implemented yet. Don't worry about which ones to select when testing the program, as long as you select some algorithm, some numbers of threads and a cachesize you should be fine.
+
+## Testing the Server
+We have been provided with a script `hydra.py` to test our web server once it's running. Hydra reads in a test script from stdin, i.e. to run hydra use the command:
+
+```
+./hydra.py < test.in
+```
+
+where `test.in` is a file containing a test script.  The format of the test file is as follows:
+- The first line of the file is a single integer, denoting the port number of the webserver
+- The remain lines represent requests to the server.  Each request comprises three parts:
+  delay : number of seconds (float) before connecting to the server
+  pause : number of seconds (flaot) after connectkng before sending request
+  file  : file (path) to requet
+
+Here is an example of a test file that makes hydra connect to the webserver on port 8080 and requests four files:
+```
+8080
+0.0 1.0 sws.c
+0.5 0.0 network.c
+0.5 0.0 network.h
+0.5 0.0 makefile
+```
+The first request connects immediately, but waits for 1 second before sending the request. The remaining requests all wait 0.5 seconds before connecting. By setting the delay and the pause appropriate we can control how many clients are connected to the webserver at any time.
+
+If the `-t` switch is used, e.g.,
+```
+./hydra.py -t < test.in
+```
+the times of the response are printed instead of the output.
+
+## Contribution Workflow
+To contribute to this project, please follow these guidelines:
+
+#### Pull the latest changes made to the master branch
+```
+git checkout master
+```
+```
+git pull
+```
+
+#### Create your own branch based on the name of your task 
+For example, if you are working on the SJF algorithm, create a new branch called "sjf-algorithm": 
+```
+git checkout -b sjf-algorithm
+```
+#### Make your changes and development inside the new branch. 
+It is recommended to commit your code when you have reached certain milestones (preferrable when your code is in a working state, e.g. no seg faults and compilation errors): 
+```
+git commit -a -m "Commit message, e.g. Implemented the SJF Algorithm"
+```
+#### Push your branch when your task is completed: 
+Commit your latest changes, then push up the branch:
+```
+git push -u origin branchname
+```
+
+#### Create a Pull Request 
+Go onto Github and create a pull request for your branch targeting the master branch. Assign another person in the team as the code reviewer and wait for their approval. The code reviewer is responsible for commenting on the code and merging the Pull Request into the master branch. The reason for doing code reviews is just to reduce chances of new features breaking in master. 
+
+#### What NOT to do
+- Please never commit directly to the master branch.
+
+## Background
+### The Web Server
+Web servers are almost as ubiquitous as operating systems today. 
+Many systems, even consumer-grade ones, can and do run web servers, sometimes as part of the OS itself. 
+Furthermore, webservers have to perform many of the same functions and decisions that operating systems do. 
+Consequently, using web servers to study how operating systems work is not an uncommon practice. 
+
+The function of a web server is to serve web requests from web clients (web browsers). 
+In short, to view a web page or download content, a web client (browser) makes a network connection (over the Internet) to a web server. 
+The client then sends a request to the server, specifying the file that the web server should send back. 
+The web server receives and parses the request, checks if the file is available, and sends it back if it is. 
+The web client then uses and renders the fileas it deems fit. 
+
+When a web server starts up, it first binds to a port, which allows clients to unambiguously specify which server to connect to. 
+For example, most web servers bind to port 80. 
+However, since our servers will be run as user-level processes, only ports in the range 1024 to 65335 are used. 
+Once the server binds to a port and completes any additional initialization, it blocks (goes to sleep) and waits for clients to connect.
+
+## Our Project Goals
+1. Implement scheduling algorithms (SJF, RR, and Multilevel Queue)
+2. Implement Multithreading
+3. Implement caching (bonus).
+
+
+Thread 5 ============================================
+HTTP/1.1 200 OK
+
+#include <stdio.h>     //provides I/O functions
+#include <stdlib.h>    //provides general C functions
+#include <string.h>    //provides functions for char[] manipulation
+#include <unistd.h>    //provides access to the POSIX API
+#include <sys/stat.h>  //needed to gather info about file attributes
+#include <pthread.h>   //multithreading library
+#include <stdarg.h>    //unknown function arguments library
+
+#include "network.h"
+#include "scheduler.h"
+#include "scheduler_queue.h"
+
+/* constants */
+#define MAX_HTTP_SIZE 8192
+#define MAX_REQUESTS 100
+#define TRUE 1
+#define FALSE 0
+
+/* global variables */
+static struct rcb request_table[MAX_REQUESTS];
+static struct rcb* free_rcb;
+static struct scheduler_queue work_queue;
+static int request_counter = 1;
+pthread_mutex_t alloc_rcb_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
+
+/*
+ * Function to safely print processing messages with multithreading.
+ */
+void thread_print_function( char * input_string, ... ) {
+    static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
+
+    //get and format parameter arguments for printing
+    va_list parameter_list;
+    va_start(parameter_list, input_string);
+
+    //lock, print, flush, unlock
+    pthread_mutex_lock( &thread_print_lock );
+    vprintf(input_string, parameter_list);
+    fflush(stdout);
+    pthread_mutex_unlock(&thread_print_lock);
+}
+
+
+/* This function takes a file handle to a client, reads in the request,
+ * parses the request, and sends back the requested file.  If the
+ * request is improper or the file is not available, the appropriate
+ * error is sent back.
+ */
+static struct rcb* serve_client(struct rcb* request_block) {
+    static char* buffer;
+    struct stat st;  //struct for file size
+    char* request_file_ptr = NULL;
+    char* strtok_result;
+    char* temp_bytes;
+    FILE* input_file;
+    int num_bytes_to_read = 0;
+    int buffer_left = MAX_HTTP_SIZE;
+    int file_descriptor = request_block->client_file_descriptor;
+
+    //allocate the request buffer if it has not yet been allocated:
+    if (!buffer) {
+        buffer = malloc(MAX_HTTP_SIZE);
+        if (!buffer) {
+            perror("Error while allocating memory");
+            abort();
+        }
+    }
+
+    memset(buffer, 0, MAX_HTTP_SIZE);
+
+    //read the request line:
+    for(temp_bytes = buffer; !strchr(temp_bytes, '\n'); buffer_left -= num_bytes_to_read) {
+        temp_bytes += num_bytes_to_read;
+        //read client request:
+        num_bytes_to_read = read(file_descriptor, temp_bytes, buffer_left);
+
+        //check if the read is complete:
+        if(num_bytes_to_read <= 0) {
+            perror("Error while reading request");
+            return NULL;
+        }
+    }
+
+    //get the file path (2nd token of the format: GET /foo/bar/qux.html HTTP/1.1)
+    temp_bytes = strtok_r(buffer, " ", &strtok_result);
+
+    //parse the request:
+    if(temp_bytes && !strcmp("GET", temp_bytes)) {
+        request_file_ptr = strtok_r(NULL, " ", &strtok_result);
+    }
+
+    //check if the request is valid:
+    if(!request_file_ptr) {
+        //invalid request. Write the error:
+        num_bytes_to_read = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
+        write(file_descriptor, buffer, num_bytes_to_read);
+    } else {
+        //request is valid.
+
+        // get file path for later use
+        strncpy(request_block->file_path, request_file_ptr, FILENAME_MAX);
+
+        //Open the file:
+        request_file_ptr++;   //skip leading /
+        input_file = fopen(request_file_ptr, "r");
+
+        //check if the file was opened:
+        if (!input_file) {
+            //file was not opened. Write the error:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 404 File not found\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+        } else if (!fstat(fileno(input_file), &st)) {
+            //file was opened. Send the success message and start the request:
+            num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
+            write(file_descriptor, buffer, num_bytes_to_read);
+
+            // //allocate the RCB:
+            // request_block = free_rcb;
+            // free_rcb = free_rcb->next_rcb;
+            // memset(request_block, 0, sizeof(struct rcb));
+
+            //initialize RCB values and return it:
+            request_block->sequence_number = request_counter++;
+            request_block->client_file_descriptor = file_descriptor;
+            request_block->file = input_file;
+            request_block->bytes_remaining = st.st_size;
+
+            return request_block;
+        }
+        fclose(input_file);
+    }
+    //invalid request. Close the client connection:
+    close(file_descriptor);
+    return NULL;
+}
+
+
+/*
+ * Determine if the request is finished yet.
+ */
+static int serve(struct rcb* request_block) {
+    static char* buffer;
+    int num_bytes_to_read;
+    int num_bytes_to_send;
+
+    //allocate the request buffer if it has not yet been allocated:
+    if (!buffer) {
+        buffer = malloc(MAX_HTTP_SIZE);
+        if (!buffer) {
+            perror("Error while allocating memory");
+            abort();
+        }
+    }
+
+    //get the # of bytes to send:
+    num_bytes_to_send = request_block->bytes_remaining;
+
+    //check how much to send and if there is a size cap:
+    if (!num_bytes_to_send) {
+        //request is finished.
+        return 0;
+    } else if (request_block->bytes_max_allowed && (request_block->bytes_max_allowed < num_bytes_to_send)) {
+        //there is a size cap. Set the size cap:
+        num_bytes_to_send = request_block->bytes_max_allowed;
+    }
+
+    //store the amount of data we are sending:
+    request_block->bytes_last_sent = num_bytes_to_send;
+
+    //read and send the file while there's still bytes to send:
+    do {
+        if (num_bytes_to_send < MAX_HTTP_SIZE) {
+            num_bytes_to_read = num_bytes_to_send;
+        } else {
+            //cap read amount to the max size:
+            num_bytes_to_read = MAX_HTTP_SIZE;
+        }
+        //read the file:
+        num_bytes_to_read = fread(buffer, 1, num_bytes_to_read, request_block->file);
+
+        //prepare to write to the client:
+        if(num_bytes_to_read < 1) {
+            perror("Error while reading file");
+            return 0;
+        } else if (num_bytes_to_read > 0) {
+            //write to the client:
+            num_bytes_to_read = write(request_block->client_file_descriptor, buffer, num_bytes_to_read);
+            if (num_bytes_to_read < 1) {
+                perror("Error while writing to client");
+                return 0;
+            }
+
+            //set remaining bytes to send:
+            request_block->bytes_remaining -= num_bytes_to_read;
+            num_bytes_to_send -= num_bytes_to_read;
+        }
+    } while((num_bytes_to_send > 0) && (num_bytes_to_read == MAX_HTTP_SIZE));
+
+    //return true if there are still bytes remaining to be sent, and false otherwise.
+    return request_block->bytes_remaining > 0;
+}
+
+
+/*
+ * Each thread executes this function.
+ */
+static void *thread_execution_function(void* arg) {
+    struct rcb* request_block;
+    int block = 0;
+
+    //enter infinite loop:
+    while (TRUE) {
+        //dequeue from the work queue and grab the RCB:
+        request_block = scheduler_dequeue(&work_queue, block);
+        if (request_block) {
+            if (serve_client(request_block)) {
+
+                //print file admitted message and submit to scheduler
+                thread_print_function("Request for file %s admitted.\n", request_block->file_path );
+                submit_to_scheduler(request_block);
+
+            } else {
+                close(request_block->client_file_descriptor);
+
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //free the RCB:
+                request_block->next_rcb = free_rcb;
+                free_rcb = request_block;
+
+                //emit a signal that the RCB is now available
+                pthread_cond_signal(&rcb_available);
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+            }
+        } else {
+            request_block = get_from_scheduler();
+            if (request_block && serve(request_block)) {
+                //request is not finished yet.
+                //Print sent bytes message and re-submit RCB to the scheduler.
+                thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
+                submit_to_scheduler(request_block);
+            } else if (request_block) {
+                //request is finished. Close the file and complete the request.
+
+                //print sent bytes message
+                thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
+
+                fclose(request_block->file);
+                close(request_block->client_file_descriptor);
+
+                //print file complete message
+                thread_print_function( "Request for file %s completed.\n", request_block->file_path );
+                fflush(stdout);
+
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //free the RCB:
+                request_block->next_rcb = free_rcb;
+                free_rcb = request_block;
+
+                //emit a signal that the RCB is now available
+                pthread_cond_signal(&rcb_available);
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+            }
+        }
+        block = request_block == NULL;
+    }
+    return NULL;
+}
+
+
+/* This function is where the program starts running.
+ * The function first parses its command line parameters to determine port #.
+ * Then it initializes the network and enters the main loop.
+ * The main loop waits for a client (1 or more) to connect, and then processes all clients.
+ */
+int main(int argc, char** argv) {
+    int port = -1;
+    int fd;
+    int num_threads;
+    struct rcb* request;
+    pthread_t thread_id;
+
+    // check for and process input parameters:
+    if((argc <= 3) || (sscanf(argv[1], "%d", &port) < 1)
+                   || (sscanf(argv[3], "%d", &num_threads) < 1)) {
+        printf("usage: sws <port> <schedulerAlgorithm> <numThreads>\n");
+        printf("For example: ./sws 8080 SJF 100\n");
+        return 0;
+    }
+
+    // initialize all components:
+    scheduler_init(argv[2]);   //init the scheduler with the user-inputted algorithm
+    network_init(port);        //init network with the given port
+    queue_init(&work_queue);   //init the work queue
+
+    // initialize request table:
+    free_rcb = request_table;
+    for (int i = 0; i < MAX_REQUESTS-1; i++) {
+        request_table[i].next_rcb = &request_table[i+1];
+    }
+
+    // initialize all threads:
+    for (int j = 0; j < num_threads; j++) {
+        pthread_create(&thread_id, NULL, &thread_execution_function, NULL);
+    }
+
+    // enter infinite loop:
+    while (TRUE) {
+        //wait for clients:
+        network_wait();
+
+        //process requests while number of requests is less than 100
+        while (request_counter < MAX_REQUESTS) {
+            //grab all file descriptors, get its RCB, and submit it to the scheduler:
+            for (fd = network_open(); fd >= 0; fd = network_open()) {
+                //we are enterting a critical section. Lock the state:
+                pthread_mutex_lock(&alloc_rcb_lock);
+
+                //check if the RCB is free'd up:
+                if (!free_rcb) {
+                    //wait for the availability signal:
+                    pthread_cond_wait(&rcb_available, &alloc_rcb_lock);
+                }
+
+                //allocate RCB:
+                request = free_rcb;
+                free_rcb = free_rcb->next_rcb;
+
+                //we are leaving a critical section. Unlock the state:
+                pthread_mutex_unlock(&alloc_rcb_lock);
+
+                memset(request, 0, sizeof(struct rcb));
+
+                //set fd and put it onto the queue:
+                request->client_file_descriptor = fd;
+                scheduler_enqueue(&work_queue, request);
+            }
+        }
+    }
+}
+
+Thread 6 ============================================
+HTTP/1.1 200 OK
+
+/* 
+ * File: network.h
+ * Author: Alex Brodsky
+ * Purpose: This file contains the prototypes and describes how to use network
+ *          module to accept web connections.
+ */
+
+#ifndef NETWORK_H
+#define NETWORK_H
+
+#include <stdio.h>
+
+/* 
+ * This module has three functions:
+ *   network_init() : inititalizes the module
+ *   network_wait() : wait until a client connects
+ *   network_open() : open the next client connection
+ *
+ * The network_init() function should be called once, at the start of the 
+ * program.  This function will create a socket to which web clients can 
+ * connect.
+ *
+ * The network_wait() function should be called when there are no more web
+ * clients waiting to connect.  This function will put the program to sleep 
+ * until one or more web clients connects.  Once one or web client connect,
+ * this function returns and your program can accept the connections.
+ *
+ * The network_open() function opens a waiting web client connection and
+ * returns an integer file descriptor.  If no clients are waiting, this 
+ * function returns -1.
+ */
+
+
+/* This function initializes the network module and creates a server socket
+ *   bound to a specified port.  This function will abort the program if an
+ *   error occurs.
+ * Parameters: 
+ *             port : the port on which the server should listen.  Should be
+ *                    between 1024 and 65525
+ * Returns: None
+ */
+extern void network_init( int port );
+
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function returns.
+ *    Otherwise, this function puts the program to sleep (blocks) until
+ *    a client connects.
+ * Parameters: None
+ * Returns: None
+ */
+extern void network_wait();
+
+
+/* This function checks if there are any web clients waiting to connect.
+ *    If one or more clients are waiting to connect, this function opens
+ *    a connection to the next client waiting to connect, and returns an
+ *    integer file descriptor for the connection.  If no clients are 
+ *    waiting, this function returns -1.
+ * Parameters: None
+ * Returns: A positive integer file decriptor to the next clients connection,
+ *          or -1 if no client is waiting.
+ */
+extern int network_open();
+
+#endif
+
+Thread 7 ============================================
+HTTP/1.1 200 OK
+
+# Targets & general dependencies
+PROGRAM = sws
+HEADERS = network.h scheduler.h request_control_block.h scheduler_queue.h
+OBJS = network.o sws.o scheduler.o scheduler_queue.o
+ADD_OBJS =
+
+# compilers, linkers, utilities, and flags
+CC = gcc
+CFLAGS = -Wall -g
+COMPILE = $(CC) $(CFLAGS)
+LINK = $(CC) $(CFLAGS) -o $@
+
+# implicit rule to build .o from .c files
+%.o: %.c $(HEADERS)
+	$(COMPILE) -c -o $@ $<
+
+
+# explicit rules
+all: sws
+
+$(PROGRAM): $(OBJS) $(ADD_OBJS)
+	$(LINK) $(OBJS) $(ADD_OBJS)
+
+lib: sws_gold.o
+	 ar -r libxsws.a sws_gold.o
+
+clean:
+	rm -f *.o $(PROGRAM)
+
+zip:
+	rm -f sws.zip
+	zip sws.zip network.c network.h makefile
+
+=====================================================================
+Request completion order:  1  2  3  4  5  6  7 

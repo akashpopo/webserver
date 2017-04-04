@@ -1,0 +1,12 @@
+//	Test Case 4 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test: Mainly a test SJF for order. All requests come in at the same
+                 times. Needed for organizing the queue and picking the
+                 shortest requests in order.
+
+How it works: All requests come in at 0.0 with no delay and the scheduler must
+              pick the shortest then run it and then the next and so on.
+
+Expected Results: 4, 3, 5, 2, 1

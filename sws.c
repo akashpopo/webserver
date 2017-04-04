@@ -115,11 +115,6 @@ static struct rcb* serve_client(struct rcb* request_block) {
             num_bytes_to_read = sprintf(buffer, "HTTP/1.1 200 OK\n\n");
             write(file_descriptor, buffer, num_bytes_to_read);
 
-            // //allocate the RCB:
-            // request_block = free_rcb;
-            // free_rcb = free_rcb->next_rcb;
-            // memset(request_block, 0, sizeof(struct rcb));
-
             //initialize RCB values and return it:
             request_block->sequence_number = request_counter++;
             request_block->client_file_descriptor = file_descriptor;
@@ -220,21 +215,6 @@ static void *thread_execution_function(void* arg) {
                 thread_print_function("Request for file %s admitted.\n", request_block->file_path );
                 submit_to_scheduler(request_block);
 
-            } else {
-                close(request_block->client_file_descriptor);
-
-                //we are enterting a critical section. Lock the state:
-                pthread_mutex_lock(&alloc_rcb_lock);
-
-                //free the RCB:
-                request_block->next_rcb = free_rcb;
-                free_rcb = request_block;
-
-                //emit a signal that the RCB is now available
-                pthread_cond_signal(&rcb_available);
-
-                //we are leaving a critical section. Unlock the state:
-                pthread_mutex_unlock(&alloc_rcb_lock);
             }
         } else {
             request_block = get_from_scheduler();
@@ -253,7 +233,7 @@ static void *thread_execution_function(void* arg) {
                 close(request_block->client_file_descriptor);
 
                 //print file complete message
-                thread_print_function( "Request for file %s completed.\n", request_block->file_path );
+                thread_print_function( "Request for file %s completed.\n\n", request_block->file_path );
                 fflush(stdout);
 
                 //we are enterting a critical section. Lock the state:
@@ -262,6 +242,7 @@ static void *thread_execution_function(void* arg) {
                 //free the RCB:
                 request_block->next_rcb = free_rcb;
                 free_rcb = request_block;
+                request_counter--;
 
                 //emit a signal that the RCB is now available
                 pthread_cond_signal(&rcb_available);
@@ -270,7 +251,8 @@ static void *thread_execution_function(void* arg) {
                 pthread_mutex_unlock(&alloc_rcb_lock);
             }
         }
-        block = request_block == NULL;
+        if (request_block == NULL) { block = 1; }
+        else { block = 0; }
     }
     return NULL;
 }

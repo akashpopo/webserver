@@ -35,7 +35,7 @@ void thread_print_function( char * input_string, ... ) {
     va_start(parameter_list, input_string);
 
     //lock, print, flush, unlock
-    pthread_mutex_lock( &thread_print_lock );
+    pthread_mutex_lock(&thread_print_lock);
     vprintf(input_string, parameter_list);
     fflush(stdout);
     pthread_mutex_unlock(&thread_print_lock);
@@ -97,7 +97,6 @@ static struct rcb* serve_client(struct rcb* request_block) {
         write(file_descriptor, buffer, num_bytes_to_read);
     } else {
         //request is valid.
-
         // get file path for later use
         strncpy(request_block->file_path, request_file_ptr, FILENAME_MAX);
 
@@ -200,21 +199,19 @@ static int serve(struct rcb* request_block) {
 /*
  * Each thread executes this function.
  */
-static void *thread_execution_function(void* arg) {
+static void* thread_execution_function(void* arg) {
     struct rcb* request_block;
-    int block = 0;
+    int wait = FALSE;
 
     //enter infinite loop:
     while (TRUE) {
         //dequeue from the work queue and grab the RCB:
-        request_block = scheduler_dequeue(&work_queue, block);
+        request_block = scheduler_dequeue(&work_queue, wait);
         if (request_block) {
             if (serve_client(request_block)) {
-
                 //print file admitted message and submit to scheduler
-                thread_print_function("Request for file %s admitted.\n", request_block->file_path );
+                thread_print_function("Request for file %s admitted.\n", request_block->file_path);
                 submit_to_scheduler(request_block);
-
             }
         } else {
             request_block = get_from_scheduler();
@@ -225,21 +222,18 @@ static void *thread_execution_function(void* arg) {
                 submit_to_scheduler(request_block);
             } else if (request_block) {
                 //request is finished. Close the file and complete the request.
-
-                //print sent bytes message
                 thread_print_function("Sent %d bytes of file %s.\n", request_block->bytes_last_sent, request_block->file_path);
 
                 fclose(request_block->file);
                 close(request_block->client_file_descriptor);
+                thread_print_function("Request for file %s completed.\n\n", request_block->file_path);
 
-                //print file complete message
-                thread_print_function( "Request for file %s completed.\n\n", request_block->file_path );
                 fflush(stdout);
 
                 //we are enterting a critical section. Lock the state:
                 pthread_mutex_lock(&alloc_rcb_lock);
 
-                //free the RCB:
+                //free the RCB and decrement request counter:
                 request_block->next_rcb = free_rcb;
                 free_rcb = request_block;
                 request_counter--;
@@ -251,8 +245,12 @@ static void *thread_execution_function(void* arg) {
                 pthread_mutex_unlock(&alloc_rcb_lock);
             }
         }
-        if (request_block == NULL) { block = 1; }
-        else { block = 0; }
+        //determine if the scheduler_dequeue function should wait:
+        if (request_block == NULL) {
+            wait = TRUE;
+        } else {
+            wait = FALSE;
+        }
     }
     return NULL;
 }

@@ -101,7 +101,7 @@ extern struct rcb* get_from_scheduler() {
  * Inserts an RCB to the queue using SJF
  */
 static void sjf_submit(struct rcb* req_control_block) {
-    struct rcb *temp_rcb;
+    struct rcb* temp_rcb;
 
     // we are entering a critical section. Lock the state:
     pthread_mutex_lock(&sjf_lock);

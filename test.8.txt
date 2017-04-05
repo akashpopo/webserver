@@ -20,4 +20,8 @@ Expected Results:
 	(in appearance) due to the fact that all requests are coming in at the 
 	exact same time. It is possible 1 or more requests are received a fraction
 	of the time before other requests are also recieved. This creates the often 
-	scrambled appearance of the completion order.*
+	scrambled appearance of the completion order. Also running the test multiple
+	times over in quick succession leads to the test being haulted completely with
+	no 'request completion order' being generated. A '400 bad request' message is
+	sometimes displayed when the test is haulted.*
+	

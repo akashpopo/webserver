@@ -2,15 +2,17 @@
 //	CSCI 3120 Winter 2017
 //	Group 16
 
-Purpose of test:	Tests requests of various sized files above and below 8KB to
-			determine the order the Round Robin scheduler processes each 
-			request.
+Purpose of test:	
+	Tests requests of various sized files above and below 8KB to
+	determine the order the Round Robin scheduler processes each 
+	request.
 
 
-How it works:		Multiple clients connect at varying time intervals to request 
-			large files of different sizes. The Round Robin scheduler is 
-			used therefore there is a data response limit of 8KB. File
-			sizes below and above 8KB will be requested from the server.
+How it works:		
+	Multiple clients connect at varying time intervals to request 
+	large files of different sizes. The Round Robin scheduler is 
+	used therefore there is a data response limit of 8KB. File
+	sizes below and above 8KB will be requested from the server.
 
 
 Expected Results:

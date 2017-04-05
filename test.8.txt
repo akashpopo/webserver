@@ -14,4 +14,10 @@ How it works:
 
 Expected Results:
 	An output file with the format	->	test.8.M.out
-	
+	The expected Request completion order is: 1 2 3 4 5 6 7 8 9 10 11 12 13
+	But...
+	*The request completion order is often scrambled or even random 
+	(in appearance) due to the fact that all requests are coming in at the 
+	exact same time. It is possible 1 or more requests are received a fraction
+	of the time before other requests are also recieved. This creates the often 
+	scrambled appearance of the completion order.*

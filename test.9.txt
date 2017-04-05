@@ -16,3 +16,10 @@ How it works:
 
 Expected Results:
 	An output file with the format	->	test.9.S.out
+	Request completion order: 2 3 4 1 5 6 7
+	The test takes atleast 10 seconds to complete as the last request is sent
+	10 seconds after the test is started.
+	
+	*Interesting behaviour: requests that take longer than 10.5 seconds to 
+	connect or are paused for longer than 10.5 seconds are not processed and
+	no 'Request completion order' is outputted at the end.*

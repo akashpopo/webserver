@@ -24,5 +24,5 @@ Expected Results:
 	
 	Often the server takes too long to process the requests and haults, displaying
 	the message 'Harikari'. The completion order is often scrambled/random as multiple requests 
-	are sent at the same time to help prevent server time out (similar to the time problem 
-	found in test 9).
+	are sent at the same time to help prevent server time out (similar behavior found in test 8 
+	and test 9).

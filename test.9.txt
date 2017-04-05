@@ -3,11 +3,16 @@
 //	Group 16
 
 Purpose of test:
+	Determine how requests with long connection and pause times affect
+	the behaviour and functionality of the server. 
 
 
 How it works:
+	Various requests are made with varying connection and pause times.
+	Some requests have a much larger wait/pause time than others to see
+	how the server handles the clients that send requests quickly versus
+	clients that take a much longer time to send requests.
 
 
 Expected Results:
-	An output file with the format	->	test.9.$.out
-	Where '$' represents the chosen scheduler.
+	An output file with the format	->	test.9.S.out

@@ -15,4 +15,10 @@ How it works:
 
 Expected Results:
 	An output file with the format	->	test.7.R.out
+	6 requests were made
+	Request 1 and 2 were found and processed successfully.
+	Requests 3-6 were invalid and the message '404 file not found' was
+	returned for each (i.e. 4 error messages were returned).
+	
+	Request completion order: 1 2 3 4 5 6
 	

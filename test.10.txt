@@ -8,8 +8,21 @@ Purpose of test:
 
 
 How it works:
-	200 clients (with varying file requests) connect to the server at different 
-	times. 
+	150 clients (with varying file requests) connect to the server at different 
+	times. Some requests are sent at the same time.
 
 Expected Results:
 	An output file with the format	->	test.10.M.out
+	Request completion order: 1  5  2  3  4  7  9  8  6  15  13  117  10  11  12  116  14 
+	118  119  16  120  17  121  18  122  19  123  20  124  130  21  131  125  22  126  132  
+	23  127  133  24  128  134  25  129  135  26  136  27  137  28  138  29  139  30  140  
+	31  141  32  142  33  143  34  144  35  145  36  146  37  147  38  148  39  149  40  
+	41  42  43  44  45  46  47  48  49  50  51  52  53  54  55  56  57  58  59  60  61  62 
+	63  64  65  66  67  68  69  70  71  72  73  74  104  75  105  76  106  77  107  78  108  
+	79  109  80  110  81  111  82  112  83  113  84  114  85  115  86  87  88  89  90  91  
+	92  93  94  95  96  97  98  99  100  101  102  103  
+	
+	Often the server takes too long to process the requests and haults, displaying
+	the message 'Harikari'. The completion order is often scrambled/random as multiple requests 
+	are sent at the same time to help prevent server time out (similar to the time problem 
+	found in test 9).

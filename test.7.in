@@ -1,3 +1,7 @@
-#	Test Case 7 script file
-#	CSCI 3120 Winter 2017
-#	Group 16
+8080
+0.0 0.0 network.c
+0.2 0.1 sws.c
+0.4 0.1 banana.c
+0.8 0.0 boat.h
+0.2 1.0 hydra.p
+1.5 0.0 notwork.c

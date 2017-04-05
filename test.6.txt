@@ -17,4 +17,5 @@ How it works:
 
 Expected Results:
 	An output file with the format	->	test.6.R.out
+	Request completion order: 4 3 2 5 6 1 7
 	

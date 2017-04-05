@@ -27,7 +27,7 @@ pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 /*
  * Function to safely print processing messages with multithreading.
  */
-void thread_print_function( char * input_string, ... ) {
+void thread_print_function(char* input_string, ... ) {
     static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;
 
     //get and format parameter arguments for printing
@@ -70,13 +70,13 @@ static struct rcb* serve_client(struct rcb* request_block) {
     memset(buffer, 0, MAX_HTTP_SIZE);
 
     //read the request line:
-    for(temp_bytes = buffer; !strchr(temp_bytes, '\n'); buffer_left -= num_bytes_to_read) {
+    for (temp_bytes = buffer; !strchr(temp_bytes, '\n'); buffer_left -= num_bytes_to_read) {
         temp_bytes += num_bytes_to_read;
         //read client request:
         num_bytes_to_read = read(file_descriptor, temp_bytes, buffer_left);
 
         //check if the read is complete:
-        if(num_bytes_to_read <= 0) {
+        if (num_bytes_to_read <= 0) {
             perror("Error while reading request");
             return NULL;
         }
@@ -86,12 +86,12 @@ static struct rcb* serve_client(struct rcb* request_block) {
     temp_bytes = strtok_r(buffer, " ", &strtok_result);
 
     //parse the request:
-    if(temp_bytes && !strcmp("GET", temp_bytes)) {
+    if (temp_bytes && !strcmp("GET", temp_bytes)) {
         request_file_ptr = strtok_r(NULL, " ", &strtok_result);
     }
 
     //check if the request is valid:
-    if(!request_file_ptr) {
+    if (!request_file_ptr) {
         //invalid request. Write the error:
         num_bytes_to_read = sprintf(buffer, "HTTP/1.1 400 Bad request\n\n");
         write(file_descriptor, buffer, num_bytes_to_read);
@@ -189,7 +189,7 @@ static int serve(struct rcb* request_block) {
             request_block->bytes_remaining -= num_bytes_to_read;
             num_bytes_to_send -= num_bytes_to_read;
         }
-    } while((num_bytes_to_send > 0) && (num_bytes_to_read == MAX_HTTP_SIZE));
+    } while ((num_bytes_to_send > 0) && (num_bytes_to_read == MAX_HTTP_SIZE));
 
     //return true if there are still bytes remaining to be sent, and false otherwise.
     return request_block->bytes_remaining > 0;
@@ -269,8 +269,8 @@ int main(int argc, char** argv) {
     pthread_t thread_id;
 
     // check for and process input parameters:
-    if((argc <= 3) || (sscanf(argv[1], "%d", &port) < 1)
-                   || (sscanf(argv[3], "%d", &num_threads) < 1)) {
+    if ((argc <= 3) || (sscanf(argv[1], "%d", &port) < 1)
+                    || (sscanf(argv[3], "%d", &num_threads) < 1)) {
         printf("usage: sws <port> <schedulerAlgorithm> <numThreads>\n");
         printf("For example: ./sws 8080 SJF 100\n");
         return 0;

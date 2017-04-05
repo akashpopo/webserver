@@ -3,11 +3,13 @@
 //	Group 16
 
 Purpose of test:
+	Determine how the server handles a large volume of varying requests using
+	the MLFB scheduler.
 
 
 How it works:
-
+	200 clients (with varying file requests) connect to the server at different 
+	times. 
 
 Expected Results:
-	An output file with the format	->	test.10.$.out
-	Where '$' represents the chosen scheduler.
+	An output file with the format	->	test.10.M.out

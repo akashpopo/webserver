@@ -1,0 +1,27 @@
+//	Test Case 8 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test:
+	Determine how multiple simultaneous requests for the same file
+	are handled.
+
+
+How it works:		
+	Multiple requests for the same file are made at the exact same
+	time. The MLFB scheduler is used to order and process the requests.
+
+
+Expected Results:
+	An output file with the format	->	test.8.M.out
+	The expected Request completion order is: 1 2 3 4 5 6 7 8 9 10 11 12 13
+	But...
+	*The request completion order is often scrambled or even random 
+	(in appearance) due to the fact that all requests are coming in at the 
+	exact same time. It is possible 1 or more requests are received a fraction
+	of the time before other requests are also recieved. This creates the often 
+	scrambled appearance of the completion order. Also running the test multiple
+	times over in quick succession leads to the test being haulted completely with
+	no 'request completion order' being generated. A '400 bad request' message is
+	sometimes displayed when the test is haulted.*
+	

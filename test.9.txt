@@ -1,0 +1,25 @@
+//	Test Case 9 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test:
+	Determine how requests with long connection and pause times affect
+	the behaviour and functionality of the server. 
+
+
+How it works:
+	Various requests are made with varying connection and pause times.
+	Some requests have a much larger wait/pause time than others to see
+	how the server handles the clients that send requests quickly versus
+	clients that take a much longer time to send requests.
+
+
+Expected Results:
+	An output file with the format	->	test.9.S.out
+	Request completion order: 2 3 4 1 5 6 7
+	The test takes atleast 10 seconds to complete as the last request is sent
+	10 seconds after the test is started.
+	
+	*Interesting behaviour: requests that take longer than 10.5 seconds to 
+	connect or are paused for longer than 10.5 seconds are not processed and
+	no 'Request completion order' is outputted at the end.*

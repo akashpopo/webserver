@@ -1,0 +1,24 @@
+//	Test Case 7 Description
+//	CSCI 3120 Winter 2017
+//	Group 16
+
+Purpose of test:	
+	Tests the server's ability to detect and handle errors.
+
+
+How it works:		
+	Multiple requests are made with varying connection and pause times.
+	Files requested are either valid, don't exist, or have some form of 
+	error in the file name. The scheduler chosen does not matter but for
+	the paramaters of the test the Round Robing scheduler is used.
+
+
+Expected Results:
+	An output file with the format	->	test.7.R.out
+	6 requests were made
+	Request 1 and 2 were found and processed successfully.
+	Requests 3-6 were invalid and the message '404 file not found' was
+	returned for each (i.e. 4 error messages were returned).
+	
+	Request completion order: 1 2 3 4 5 6
+	

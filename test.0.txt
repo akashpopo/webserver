@@ -1,0 +1,9 @@
+// Test Case 0 Description
+// CSCI 3120 Winter 2017
+// Group 16
+
+Purpose of test: See if the server can handle 0 requests.
+
+How it works: We only input the port number to the hydra.py file and nothing else.
+
+Expected Results: No output (since there is no input).

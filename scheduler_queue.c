@@ -8,6 +8,10 @@ static pthread_cond_t condition_init = PTHREAD_COND_INITIALIZER;
 
 /*
  * Initialize the work queue
+ *
+ * Source:
+ * Understanding "extern" keyword in C. (2017, March 27).
+ * Retrieved April 02, 2017, from http://www.geeksforgeeks.org/understanding-extern-keyword-in-c/
  */
 extern void queue_init(struct scheduler_queue* queue) {
     queue->lock = mutex_initialize;
@@ -16,6 +20,10 @@ extern void queue_init(struct scheduler_queue* queue) {
 
 /*
  * Enqueues an RCB
+ *
+ * Source:
+ * Multiple-writer thread-safe queue in C. (n.d.).
+ * Retrieved April 02, 2017, from http://stackoverflow.com/questions/1212623/multiple-writer-thread-safe-queue-in-c
  */
 extern void scheduler_enqueue(struct scheduler_queue* queue, struct rcb* req_control_block) {
     req_control_block->next_rcb = NULL;
@@ -42,6 +50,10 @@ extern void scheduler_enqueue(struct scheduler_queue* queue, struct rcb* req_con
 
 /*
  * Removes and returns the first RCB in the queue
+ *
+ * Source:
+ * Multiple-writer thread-safe queue in C. (n.d.).
+ * Retrieved April 02, 2017, from http://stackoverflow.com/questions/1212623/multiple-writer-thread-safe-queue-in-c
  */
 extern struct rcb* scheduler_dequeue(struct scheduler_queue* queue, int wait) {
     struct rcb* req_control_block;

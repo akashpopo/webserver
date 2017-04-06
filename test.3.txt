@@ -2,8 +2,12 @@
 //	CSCI 3120 Winter 2017
 //	Group 16
 
-Purpose of test: Tests the entry times for the requests.
+Purpose of test: 
+        Tests the entry times for the requests.
 
-How it works: Takes each request in one at a time and returns them in order.
+How it works: 
+        Takes each request in one at a time and returns them in order.
 
-Expected Results: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+Expected Results:
+        An output file with the format	->	test.3.R.out
+        Request completion order: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11

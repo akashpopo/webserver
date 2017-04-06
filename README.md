@@ -8,6 +8,7 @@ As part of our Operating Systems course at Dalhousie University, we are developi
 - Contribution Workflow
 - Background
 - Project Goals
+- References
 
 ## Environment Setup
 

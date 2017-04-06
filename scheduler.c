@@ -26,6 +26,10 @@ static pthread_mutex_t sjf_lock = PTHREAD_COND_INITIALIZER;
 
 /*
  * initialize and set the scheduler
+ *
+ * Source:
+ * Understanding "extern" keyword in C. (2017, March 27).
+ * Retrieved April 02, 2017, from http://www.geeksforgeeks.org/understanding-extern-keyword-in-c/
  */
 extern void scheduler_init(char* selected_algorithm) {
     if (!strcmp(selected_algorithm, "SJF")) {
@@ -51,6 +55,10 @@ extern void scheduler_init(char* selected_algorithm) {
 
 /*
  * Submits a RCB to the scheduler
+ *
+ * Source:
+ * Understanding "extern" keyword in C. (2017, March 27).
+ * Retrieved April 02, 2017, from http://www.geeksforgeeks.org/understanding-extern-keyword-in-c/
  */
 extern void submit_to_scheduler(struct rcb* request_control_block) {
     if (!strcmp(scheduler_algorithm_selected, "SJF")) {
@@ -74,6 +82,10 @@ extern void submit_to_scheduler(struct rcb* request_control_block) {
 
 /*
  * Removes the RCB and gets the next RCB
+ *
+ * Source:
+ * Understanding "extern" keyword in C. (2017, March 27).
+ * Retrieved April 02, 2017, from http://www.geeksforgeeks.org/understanding-extern-keyword-in-c/
  */
 extern struct rcb* get_from_scheduler() {
     if (!strcmp(scheduler_algorithm_selected, "SJF")) {

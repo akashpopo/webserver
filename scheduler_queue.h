@@ -1,11 +1,24 @@
+/*
+ * Singleton pattern
+ *
+ * Source:
+ * Singleton Pattern in C. (n.d.). Retrieved March 28, 2017,
+ * from http://stackoverflow.com/questions/5171661/singleton-pattern-in-c
+ */
 #ifndef SCHEDULER_QUEUE
-#define SCHEDULER_QUEUE /* singleton pattern */
+#define SCHEDULER_QUEUE
 
 #include <pthread.h>
 
 #include "request_control_block.h"
 
-/* queue structure that keeps track of the RCB head and tail */
+/*
+ * Queue structure that keeps track of the RCB head and tail
+ *
+ * Source:
+ * Mutex Lock Code Examples (Multithreaded Programming Guide). (n.d.).
+ * Retrieved March 26, 2017, from https://docs.oracle.com/cd/E19683-01/806-6867/sync-12/index.html
+ */
 struct scheduler_queue {
     struct rcb* head;
     struct rcb* tail;

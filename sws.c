@@ -26,6 +26,10 @@ pthread_cond_t rcb_available = PTHREAD_COND_INITIALIZER;
 
 /*
  * Function to safely print processing messages with multithreading.
+ *
+ * Source:
+ * How to use printf() in multiple threads. (n.d.).
+ * Retrieved April 02, 2017, from http://stackoverflow.com/questions/23586682/how-to-use-printf-in-multiple-threads
  */
 void thread_print_function(char* input_string, ... ) {
     static pthread_mutex_t thread_print_lock = PTHREAD_MUTEX_INITIALIZER;

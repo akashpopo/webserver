@@ -29,4 +29,4 @@ clean:
 
 zip:
 	rm -f sws.zip
-	zip sws.zip network.c network.h makefile
+	zip sws.zip *.c *.h *.in *.txt *.out *.py makefile README.md
